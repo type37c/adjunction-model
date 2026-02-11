@@ -125,7 +125,39 @@ The update `C(t) → C(t+1)` follows three steps, borrowed from **Çatal et al. 
 
 This requirement is satisfied **structurally** without a dedicated mechanism. In the adjunction, Shape (the external world) does not depend on C, but Action (the agent's interpretation) does depend on C. This asymmetry means the model inherently distinguishes between "what is out there" (Shape, independent of the agent) and "what I can do with it" (Action, dependent on the agent). No additional implementation is needed.
 
-## 5. Loss Function
+## 5. Implementation Strategy
+
+This section outlines the strategy for leveraging existing codebases and libraries to accelerate the prototype development, while focusing new development efforts on the core theoretical contributions of the Physical-Semantic Adjunction Model.
+
+### 5.1. Core Libraries and Frameworks
+
+-   **PyTorch**: The primary deep learning framework for model implementation.
+-   **PyTorch Geometric**: Essential for implementing Graph Neural Networks (GNNs) for point cloud processing (F and G).
+-   **`inferactively-pymdp`**: A Python library for Active Inference. While designed for discrete state spaces, its core inference loop structure and Free Energy minimization principles will be adapted for the continuous state space of Agent Layer (C).
+
+### 5.2. Code Reuse and New Development Boundaries
+
+We will adopt a strategy of **maximal reuse for established components** and **focused new development for theoretically novel parts**.
+
+| Component | Reuse Strategy | Specific References / Codebases |
+|---|---|---|
+| **F (Shape → Action) GNN Encoder** | **High Reuse**: Leverage existing GNN architectures and implementations for point cloud feature extraction. | `PointNet++` or `DGCNN` implementations within PyTorch Geometric. Data loading and preprocessing from `3D AffordanceNet` [1] and `Contact-GraspNet` [2] repositories. |
+| **G (Action → Shape) Conditional Decoder** | **Moderate Reuse**: Standard conditional VAE decoder architectures can be adapted. The specific input/output mapping will be new. | General conditional VAE decoder patterns. `Andries et al. (2020)` [3] for the conceptual approach of generating shapes from affordances. |
+| **Agent Layer (C) State Representation** | **High Reuse**: Directly adopt the RSSM architecture. | `DreamerV3` [4] implementations (e.g., from official or community PyTorch ports). |
+| **Agent Layer (C) Update Rule** | **High Reuse**: Adapt the three-step update rule. | `Çatal et al. (2020)` [5] for EFE action selection, and `DreamerV3` [4] for RSSM update mechanics. |
+| **Loss Function Components** | **High Reuse**: Standard reconstruction losses, cross-entropy for classification, and variational free energy terms. | PyTorch's `nn.MSELoss`, `nn.CrossEntropyLoss`. Variational Free Energy terms as defined in `DreamerV3` [4] and `Çatal et al. (2020)` [5]. |
+| **Integration of F, G, C (Adjunction Loop)** | **New Development**: The specific way F, G, and C interact to form the conditional adjunction and dynamic loop is novel. | This is the core theoretical contribution and will be implemented from scratch, guided by the `ARCHITECTURE.md` and `interim_design.md`. |
+| **Coherence Signal Calculation** | **New Development**: While conceptually a reconstruction loss, its interpretation as the unit η and its role in the agent's observation `o_t` is specific to this model. | Implemented as `||Shape - G(F(Shape))||` within the main model integration. |
+
+### 5.3. Development Environment
+
+-   **Python 3.9+**
+-   **`pip`** for package management.
+-   **`conda` or `venv`** for environment isolation (recommended).
+
+---
+
+## 6. Loss Function
 
 | Loss | Formula | Purpose | Weight |
 |---|---|---|---|

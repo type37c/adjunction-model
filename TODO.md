@@ -5,14 +5,14 @@ This file tracks the development status and next steps for the `adjunction-model
 ## Phase 1: Prototype Implementation
 
 ### Core Components
-- [ ] **Environment Setup**: Install PyTorch, PyTorch Geometric, and `inferactively-pymdp`.
-- [ ] **Data Loader**: Implement a data loader for the `3D AffordanceNet` dataset, including point cloud preprocessing.
-- [ ] **Adjoint Layer (F)**: Implement the PointNet++ based encoder for the `Shape -> Action` mapping.
-- [ ] **Adjoint Layer (G)**: Implement the conditional decoder for the `Action -> Shape` mapping.
-- [ ] **Agent Layer (C)**: Implement the RSSM structure (`h` and `z` states) and the GRU-based update rule.
-- [ ] **Action Selection**: Implement the Expected Free Energy (EFE) calculation for policy selection, based on Çatal et al. (2020).
-- [ ] **Loss Function**: Implement the composite loss function (`L_recon`, `L_affordance`, `L_vfe`).
-- [ ] **Training Loop**: Integrate all components into a single, end-to-end training script.
+- [ ] **Environment Setup**: Install PyTorch, PyTorch Geometric, and `inferactively-pymdp`. (See `ARCHITECTURE.md` Section 5.1 for core libraries.)
+- [ ] **Data Loader**: Implement a data loader for the `3D AffordanceNet` dataset, including point cloud preprocessing. (Reference: `3D AffordanceNet` [1] and `Contact-GraspNet` [2] repositories for data handling examples.)
+- [ ] **Adjoint Layer (F)**: Implement the PointNet++ based encoder for the `Shape -> Action` mapping. (Reference: `PointNet++` or `DGCNN` implementations in PyTorch Geometric, `3D AffordanceNet` [1] and `Contact-GraspNet` [2] for architecture details.)
+- [ ] **Adjoint Layer (G)**: Implement the conditional decoder for the `Action -> Shape` mapping. (Reference: General conditional VAE decoder patterns, `Andries et al. (2020)` [3] for conceptual approach.)
+- [ ] **Agent Layer (C)**: Implement the RSSM structure (`h` and `z` states) and the GRU-based update rule. (Reference: `DreamerV3` [4] implementations for RSSM architecture.)
+- [ ] **Action Selection**: Implement the Expected Free Energy (EFE) calculation for policy selection, based on Çatal et al. (2020). (Reference: `Çatal et al. (2020)` [5] for EFE calculation, `inferactively-pymdp` for general Active Inference loop structure.)
+- [ ] **Loss Function**: Implement the composite loss function (`L_recon`, `L_affordance`, `L_vfe`). (Reference: `ARCHITECTURE.md` Section 6 for formulas, `DreamerV3` [4] and `Çatal et al. (2020)` [5] for VFE terms.)
+- [ ] **Training Loop**: Integrate all components into a single, end-to-end training script. (This is a new development task, integrating F, G, C, and losses as described in `ARCHITECTURE.md` Section 5.2.)
 
 ### Undecided / Needs Further Discussion
 
