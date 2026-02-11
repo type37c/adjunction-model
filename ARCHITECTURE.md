@@ -6,7 +6,9 @@ This document describes the concrete architecture for the prototype implementati
 
 This model addresses the **symbol grounding problem** in AI: current systems manipulate symbols (words, labels) without understanding their physical meaning. The core idea is that **meaning arises from the structural correspondence between physical shapes and the actions they afford**. A cup's shape means "drinkable" not because of a label, but because its geometry enables the action of drinking.
 
-This correspondence is formalized using **adjunction** from category theory — a pair of structure-preserving maps F and G between two domains (Shape and Action) that are not inverses of each other, but are "optimally related" in a precise mathematical sense. The adjunction is **conditioned on an agent's internal state C** (goals, memory, physical constraints), meaning the same shape affords different actions depending on who is interacting with it.
+However, the true essence of intelligence in this model is not the stable **adjunction (F⊣G)** itself, but the **suspension structure** that dynamically maintains and repairs this adjunction. The adjunction represents a moment of stable understanding, a 'riverbed' where meaning flows. But when this stable state breaks down (a `coherence breakdown`), the agent's intelligence is revealed in its ability to hold this broken state in 'suspension' and actively seek to re-establish a new, coherent understanding. This dynamic process of breakdown, suspension, and repair is the core of creative problem-solving and true intelligence.
+
+The adjunction is formalized using category theory — a pair of structure-preserving maps F and G between two domains (Shape and Action) that are not inverses of each other, but are "optimally related" in a precise mathematical sense. This adjunction is **conditioned on an agent's internal state C** (goals, memory, physical constraints), meaning the same shape affords different actions depending on who is interacting with it. The agent's internal state C is where the 'suspension structure' resides, driving the search for new adjunctions when old ones fail.
 
 ## 2. Two-Layer Architecture
 
