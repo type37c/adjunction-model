@@ -48,6 +48,12 @@ adjunction-model/
 
 ---
 
+## Development Guidelines
+
+All development, especially by AI agents, MUST follow the rules outlined in [AGENT_GUIDELINES.md](AGENT_GUIDELINES.md). This file contains the core principles, workflow, and best practices for ensuring consistent and high-quality development across multiple sessions.
+
+---
+
 ## Status
 
 This project is in the **theoretical formulation** stage. The next step is a minimal viable experiment using PyTorch Geometric to verify that an adjoint structure can learn bidirectional inference between shape and action by minimizing reconstruction error.
