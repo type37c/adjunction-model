@@ -58,7 +58,10 @@ This phase aims to align the learned Shape-Action representations with linguisti
 
 ## Undecided / Needs Further Discussion
 
--   [ ] **Suspension Structure Verification**: How do we experimentally verify that the integrated model exhibits the properties of a "suspension structure"? This will be a continuous discussion throughout the development and experimentation phases.
+-   [ ] **Suspension Structure Emergence Verification**: Based on the new principle ("we don't design the suspension structure, we design the conditions for its emergence"), this task is redefined. The goal is to design and verify the conditions that force the suspension structure to emerge.
+    -   [ ] **Condition 1 (Non-vanishing Coherence Signal)**: Design a learning environment or loss function where the coherence signal is never permanently zero, forcing the agent to continuously adapt.
+    -   [ ] **Condition 2 (Breakdown is not Fatal)**: Ensure the agent's architecture can withstand and recover from coherence breakdowns without catastrophic failure (e.g., through robust state management in Layer C).
+    -   [ ] **Condition 3 (Free Movement of Abstraction)**: Implement a mechanism that allows the agent to shift its level of abstraction (λ) in response to coherence signals, enabling it to re-frame problems at different granularities.
 
 ## References
 

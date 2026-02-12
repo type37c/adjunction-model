@@ -6,9 +6,9 @@ This document describes the concrete architecture for the prototype implementati
 
 This model addresses the **symbol grounding problem** in AI: current systems manipulate symbols (words, labels) without understanding their physical meaning. The core idea is that **meaning arises from the structural correspondence between physical shapes and the actions they afford**. A cup's shape means "drinkable" not because of a label, but because its geometry enables the action of drinking.
 
-However, the true essence of intelligence in this model is not the stable **adjunction (F⊣G)** itself, but the **suspension structure** that dynamically maintains and repairs this adjunction. The adjunction represents a moment of stable understanding, a 'riverbed' where meaning flows. But when this stable state breaks down (a `coherence breakdown`), the agent's intelligence is revealed in its ability to hold this broken state in 'suspension' and actively seek to re-establish a new, coherent understanding. This dynamic process of breakdown, suspension, and repair is the core of creative problem-solving and true intelligence.
+However, the true essence of intelligence in this model has been refined. It is not the stable **adjunction (F⊣G)** itself (the 'riverbed'), but the underlying, **always-on suspension structure** (the 'geology') that governs how the riverbed is formed and repaired. The suspension structure is not something that is 'activated' on breakdown; it is the invariant principle that ensures the system always seeks coherence. A `coherence breakdown` is not a failure state but a signal that shifts the structure's operational mode from stable exploitation to creative exploration.
 
-The adjunction is formalized using category theory — a pair of structure-preserving maps F and G between two domains (Shape and Action) that are not inverses of each other, but are "optimally related" in a precise mathematical sense. This adjunction is **conditioned on an agent's internal state C** (goals, memory, physical constraints), meaning the same shape affords different actions depending on who is interacting with it. The agent's internal state C is where the 'suspension structure' resides, driving the search for new adjunctions when old ones fail.
+The adjunction is formalized using category theory — a pair of structure-preserving maps F and G between two domains (Shape and Action) that are not inverses of each other, but are "optimally related" in a precise mathematical sense. This adjunction is **conditioned on an agent's internal state C** (goals, memory, physical constraints), meaning the same shape affords different actions depending on who is interacting with it. The agent's internal state C is the medium through which the suspension structure operates, conditioning the adjunction and being updated by the coherence signal. It drives the search for new adjunctions when old ones fail.
 
 ## 2. Two-Layer Architecture
 
@@ -109,7 +109,7 @@ The agent state is borrowed from **DreamerV3's RSSM (Recurrent State-Space Model
 
 | Component | Type | Role | Suspension Requirement |
 |---|---|---|---|
-| `h_t` | GRU hidden state (deterministic) | Compressed history of all past experiences | **Memory** |
+| `h_t` | GRU hidden state (deterministic) | Compressed history of all past experiences | **Temporal Persistence** |
 | `z_t` | Categorical distribution (stochastic) | Current belief about the state of the world | Perception / Interpretation |
 | Preferred observation prior | Fixed or learned distribution | What the agent "wants" to observe | **Intentionality** |
 
@@ -117,7 +117,7 @@ The agent state is borrowed from **DreamerV3's RSSM (Recurrent State-Space Model
 
 The update `C(t) → C(t+1)` follows three steps, borrowed from **Çatal et al. (2020)** [5] and DreamerV3:
 
-**Step 1 — Memory Update**: `h_t = GRU(h_{t-1}, z_{t-1}, a_{t-1})`. The GRU integrates the previous belief, the previous action, and the previous memory into a new memory state. This implements **temporal duration** — the model carries forward information across time steps.
+**Step 1 — Memory Update**: `h_t = GRU(h_{t-1}, z_{t-1}, a_{t-1})`. The GRU integrates the previous belief, the previous action, and the previous memory state into a new memory state. This implements **temporal persistence** — the model carries forward information across time steps. **Memory** is not a separate module but an emergent property of this persistent state, where the history of interactions is compressed within `h_t`.
 
 **Step 2 — Belief Inference**: `z_t ~ q(z_t | h_t, o_t)`. Given the new memory and the current observation (which includes the coherence signal from the Adjoint Layer), the model infers a new belief about the world.
 
@@ -127,7 +127,30 @@ The update `C(t) → C(t+1)` follows three steps, borrowed from **Çatal et al. 
 
 This requirement is satisfied **structurally** without a dedicated mechanism. In the adjunction, Shape (the external world) does not depend on C, but Action (the agent's interpretation) does depend on C. This asymmetry means the model inherently distinguishes between "what is out there" (Shape, independent of the agent) and "what I can do with it" (Action, dependent on the agent). No additional implementation is needed.
 
-## 5. Implementation Strategy
+## 5. Three-Phase Learning Framework
+
+The training and operation of the model follow a three-phase framework, separating the learning of the core adjunction from its contextualization by the agent.
+
+### Phase 1: Pre-training the Adjoint Layer (F ⊣ G)
+
+-   **Goal**: Learn the general, context-independent correspondence between shapes and actions.
+-   **Mechanism**: Train the Adjoint Layer (F and G) in a self-supervised or supervised manner on a large dataset of shapes and affordance labels (e.g., 3D AffordanceNet). The Agent Layer (C) is **not** involved in this phase.
+-   **Supervision**: The training is driven by the reconstruction loss (`L_recon`) and affordance prediction loss (`L_aff`). This establishes the basic "riverbed."
+
+### Phase 2: Fine-tuning with the Agent Layer (C)
+
+-   **Goal**: Contextualize the general adjunction with the agent's specific internal state and world model.
+-   **Mechanism**: Freeze or slowly fine-tune the pre-trained Adjoint Layer. Introduce the Agent Layer (C) and train it to modulate the behavior of F and G based on its state (`h_t`, `z_t`) while learning a world model.
+-   **Supervision**: The training is driven by the full loss function, including the variational free energy (`L_vfe`) for the world model within C.
+
+### Phase 3: Online Inference and Adaptation
+
+-   **Goal**: Execute tasks and creatively adapt to novel situations.
+-   **Mechanism**: The full, trained model (F, G, and C) interacts with the environment. The `coherence signal` is not used for backpropagation but as an online observation `o_t` that informs the Agent Layer's belief inference (`z_t ~ q(z_t | h_t, o_t)`), shifting the system's mode between stable exploitation and creative exploration.
+
+---
+
+## 6. Implementation Strategy
 
 This section outlines the strategy for leveraging existing codebases and libraries to accelerate the prototype development, while focusing new development efforts on the core theoretical contributions of the Physical-Semantic Adjunction Model.
 
@@ -159,7 +182,7 @@ We will adopt a strategy of **maximal reuse for established components** and **f
 
 ---
 
-## 6. Experimental Design and Evaluation Metrics
+## 7. Experimental Design and Evaluation Metrics
 
 This section outlines the experimental designs to validate the core theoretical claims of the Physical-Semantic Adjunction Model: solving the symbol grounding problem, generalization to unknown objects, and the emergence of creativity under constraint.
 
@@ -203,7 +226,7 @@ This section outlines the experimental designs to validate the core theoretical 
 
 ---
 
-## 7. Loss Function
+## 8. Loss Function
 
 | Loss | Formula | Purpose | Weight |
 |---|---|---|---|
@@ -215,13 +238,13 @@ This section outlines the experimental designs to validate the core theoretical 
 
 The weights `w1, w2, w3` are hyperparameters to be tuned. A reasonable starting point is `w1=1.0, w2=1.0, w3=0.1` (prioritizing the adjoint layer's learning in early training).
 
-## 6. Data
+## 9. Data
 
 **Dataset**: 3D AffordanceNet [1] — 23,000 3D shapes across 23 object categories, with per-point affordance annotations across 18 affordance types (e.g., grasp, sit, support, contain, wrap-grasp, open, lay, press, ...).
 
 This dataset provides both the input to F (point clouds) and the supervision for F (affordance labels). The reconstruction target for G is the original point cloud.
 
-## 7. File Structure (Planned)
+## 10. File Structure (Planned)
 
 ```
 adjunction-model/
@@ -245,7 +268,7 @@ adjunction-model/
     └── default.yaml                # Hyperparameters
 ```
 
-## 8. Key References
+## 11. Key References
 
 1. 3D AffordanceNet: https://github.com/Gorilla-Lab-SCUT/AffordanceNet
 2. Contact-GraspNet (PyTorch): https://github.com/elchun/contact_graspnet_pytorch

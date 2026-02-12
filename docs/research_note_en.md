@@ -10,13 +10,20 @@ This document presents the technical design for translating this theory of suspe
 
 ## 2. The Overall Architecture: A Two-Layer Model for Realizing Suspension
 
-To realize the suspension structure, the model is composed of the following two layers:
+The model is composed of two layers to realize the suspension structure. However, the core insight has been updated: the suspension structure is not something to be "realized" or "activated" but is an **always-on, underlying principle**. The layers are the medium through which this principle operates.
 
--   **Adjoint Layer**: Implements the bidirectional mappings `F: Shape → Action` and `G: Action → Shape` between the environment (Shape) and the agent's actions (Action). This layer provides a stable interface for the agent to "understand" the world and "act" within it. The `coherence signal` here indicates the degree of adjoint validity (prediction error) and serves as a trigger to activate the suspension structure. From this layer emerge the requirements of "sensitivity to difference" and "self/non-self distinction" for the suspension structure.
+-   **Adjoint Layer (The Riverbed)**: Implements the bidirectional mappings `F: Shape → Action` and `G: Action → Shape`. This is a **variable** structure, representing the agent's current stable understanding of the world. It is shaped by experience (the water flow).
 
--   **Agent Layer (C)**: Holds the agent's entire internal state, which conditions the adjoint layer and controls its dynamic behavior. This layer stores "intentionality (purpose)" and "memory," and plays the role of a "suspension space" for exploring and constructing new adjoints when `coherence breakdown` occurs. This layer enables the agent's context-dependent and flexible behavior and realizes the "temporal persistence" requirement of the suspension structure.
+-   **Agent Layer (C)**: Holds the agent's entire internal state. This layer conditions the Adjoint Layer, determining its behavior. The `coherence signal` from the Adjoint Layer, in turn, updates the Agent Layer. This dynamic loop *is* the Suspension Structure in action.
 
-These two layers form a dynamic loop, generating the dynamics of the suspension structure, which is the essence of intelligence. The agent layer C determines the behavior of the adjoint layer, and the resulting coherence signal updates the agent layer C. Through this cycle, intelligence adapts to the environment and, at times, transforms the environment itself.
+These two layers form a dynamic loop, generating the dynamics of the suspension structure, which is the essence of intelligence. The aThis cycle, where the agent layer C determines the behavior of the adjoint layer, and the resulting coherence signal updates the agent layer C, is how intelligence adapts to and sometimes transforms the environment.
+
+Initially, it was thought that a separate "goal space" was needed to handle hierarchical objectives. However, further discussion concluded that **the hierarchy of goals is naturally represented as a hierarchy of activation patterns in the GNN**. No separate goal space needs to be designed.
+
+- **Concrete goals** (e.g., "lift this bag") correspond to activations between specific nodes in the GNN.
+- **Abstract goals** (e.g., "transport objects") correspond to activations between clusters of nodes in the GNN.
+
+When a coherence breakdown occurs, the process of referring to the coherence of larger clusters is equivalent to automatically raising the level of abstraction of the goal.onment itself.
 
 ## 3. Technical Specifications: Components for Implementing the Suspension Structure
 
@@ -28,18 +35,42 @@ Based on research, each theoretical component is mapped to the following technic
 | **Action Category** | Probability distribution of relative poses of body parts and object surface points | ZSP3A [1], ContactGrasp [2] | Represents the agent's action possibilities. The world that intelligence "acts upon." |
 | **Functor F: Shape→Action** | Affordance prediction model using Graph Neural Networks (GNN) | PyTorch Geometric [3] | Infers action possibilities from object shapes. Encoder of the adjoint layer. |
 | **Functor G: Action→Shape** | Inverse inference model using conditional GNN decoder | Andries et al. (2020) [7] | Reconstructs the functional core of a shape required for a specific action. Decoder of the adjoint layer. |
-| **Coherence Signal (η)** | Reconstruction error `distance(shape, G(F(shape)))` | Active Inference [4], Self-supervised learning | Indicates the degree of adjoint validity. Functions as a prediction error and serves as a **trigger to activate the suspension structure** (sensitivity to difference). |
+| **Coherence Signal (η)** | Reconstruction error `distance(shape, G(F(shape)))` | Active Inference [4], Self-superviseThe `coherence signal` here indicates the degree of adjoint validity (prediction error). However, its role has been re-conceptualized. It is not a "trigger" that activates the suspension structure, but an **internal indicator that shifts the operational mode** of the always-on suspension structure.** (sensitivity to difference). |
 | **Agent State C** | Latent state `(h, z)` of DreamerV3's RSSM (Recurrent State-Space Model) | DreamerV3 [8] | Agent's entire internal state, holding intentionality (purpose) and memory. It is the **core of the suspension structure** and includes a "suspension space" for exploring and constructing new adjoints. |
-| **Memory** | Deterministic state `h` of RSSM (GRU hidden state) | DreamerV3 [8] | Compresses and retains past experiences (history of coherence signals, action outcomes). Used for exploration within the suspension structure. |
+
 | **Intentionality** | "Prior distribution over preferred observations" in Active Inference | Çatal et al. (2020) [9] | Agent's goals and values. Guides the exploration direction within the suspension structure. |
 | **Dynamic Loop** | Update cycle `C(t)` → `F_C` → `η` → `C(t+1)` | Active Inference loop structure | Continuous interaction between agent and environment. Realizes the "temporal persistence" of the suspension structure. |
 | **Suspension Space** | Hypothesis generation module within Agent Layer C (not yet implemented) | (New development) | Activated during `coherence breakdown`. Simulates and generates candidates for new `F'` `G'` to replace existing adjoints. |
 
-## 4. Deepening the Integration of Two Theories: Adjoint Model and Active Inference
+### The Geology, Riverbed, and Water Flow Metaphor
 
-Through research, a strong correspondence has been found between this model and **Active Inference** proposed by Karl Friston. The `coherence signal (η)` can be largely identified with the **prediction error (free energy)** in Active Inference. This allows our model to be positioned as a "re-formalization of Active Inference using the algebraic language of category theory."
+The design philosophy has evolved from the simple "riverbed" metaphor to a more refined **"Geology, Riverbed, and Water Flow"** metaphor. This clarifies the structural difference between this model and current AI.
+
+| Element | Current AI | This Model |
+| :--- | :--- | :--- |
+| **Gravity (Objective Func.)** | The sole, fixed driving force. | Exists, but is only one factor determining the flow. |
+| **Water Flow (Experience)** | Follows gravity to the lowest point and stops. | Is constrained by the riverbed, erodes the riverbed, and keeps flowing. |
+| **Riverbed (Adjoint Structure)** | Does not exist. | Defines the "shape" of the flow. It is **variable** and shaped by the water flow. |
+| **Geology (Suspension Structure)** | Does not exist. | The **invariant** principle that governs how the riverbed is formed and deformed. |
+
+While current AI is a system of "gravity alone," this model sees intelligence as the dynamic interplay of these three elements: the geology (suspension structure) forms the riverbed (adjoint structure), the riverbed shapes the water flow (action), and the water flow erodes the riverbed.
+
+## 4. Coherence Signal: The Internal Indicator of the Suspension Structure's Mode
+
+Through research, a strong correspondence has been found between this model and **Active Inference** proposed by Karl Friston. The `coherence signal (η)` can be largely identified with the **prediction error (free energy)** in Active Inference. The `coherence signal (η)` can be largely identified with the **prediction error (free energy)** in Active Inference. This allows our model to be positioned as a "re-formalization of Active Inference using the algebraic language of category theory."
 
 However, this model not only re-formalizes Active Inference but also deepens its concepts. While Active Inference is based on the principle of "minimizing" prediction error, this model finds the essence of intelligence in the **"breakdown (coherence breakdown)" of prediction error and the subsequent "reconstruction"** process. This suggests the possibility of directly addressing concepts like "suspension structure" and "creativity," which are difficult to formulate probabilistically.
+
+### Saturation and Intrinsic Creativity
+
+Furthermore, a new axis, **Saturation**, was introduced to describe the agent's internal state, in contrast to the Coherence Signal, which is an external axis driven by environmental demands. Saturation indicates the degree to which learning and discovery have stagnated due to repetitive states.
+
+| Source of Creativity | Trigger | Meaning |
+| :--- | :--- | :--- |
+| **Extrinsic Creativity** | Increase in Coherence Signal | Responding to environmental changes and the breakdown of existing understanding. |
+| **Intrinsic Creativity** | Increase in Saturation | Actively seeking new meaning out of internal "boredom," even in a stable environment. |
+
+This two-axis model portrays intelligence not just as a reactor to environmental stimuli, but as an entity that can generate new meaning from its own sense of monotony, actively creating ripples in a stable world.
 
 ## 5. Experimental Design for Verifying the Emergence of Intelligence through Suspension
 
@@ -75,11 +106,31 @@ The true motivation of this model is not merely 3D shape reconstruction, but the
     3.  **Alignment Evaluation**: Evaluate whether the functional core extracted by `G(F(shape))` (reconstructed shape features or affordance distribution) can be aligned with the LLM's descriptions. For example, measure cosine similarity between affordance distributions and linguistic embeddings, or train a separate model to generate shapes from linguistic descriptions and compare with G's output.
 -   **Implementation Considerations**: Multimodal embedding model techniques like CLIP can be applied for aligning linguistic descriptions with shape-action representations.
 
-## 6. Conclusion and Future Work
+## 6. Conclusion: We Don't Design the Suspension Structure
 
-This design document, based on the fundamental insight that "the essence of intelligence lies in the suspension structure," bridges the theory and implementation of the Physical-Semantic Adjunction Model. The adjoint structure is a "stable vessel" through which intelligence understands the world, and the suspension structure is the "dynamics" that creatively constructs new vessels when the existing one breaks.
+This research note has explored the theoretical framework of the Physical-Semantic Adjunction Model, centered on the suspension structure as the essence of intelligence. Through this process, the theory has overcome its own contradictions and evolved into a simpler, more powerful form. The final conclusion overturns the initial assumptions.
 
-Future work involves implementing a prototype based on this design and demonstrating the emergence of intelligence through suspension via the proposed experimental settings. In particular, the implementation of mechanisms for detecting `coherence breakdown` and the subsequent exploration and construction of new adjoints within the "suspension space" will be key to the success of this project.
+> **We do not design the suspension structure. We design the conditions under which the suspension structure must emerge.**
+
+If we try to explicitly design the suspension structure from the outside, it becomes merely a "mimicry" of the designer's intelligence. True intelligence is not something designed, but a dynamic that self-organizes under the right conditions. Therefore, our goal has shifted to designing the "geology" from which the suspension structure naturally arises.
+
+### 6.1 Summary of Theoretical Achievements
+
+- **The Essence of Intelligence**: The core of intelligence is the always-on **Suspension Structure** (the geology). It is the invariant structure that tries to re-establish meaning when meaning breaks down.
+- **Role of the Adjoint Structure**: The Adjoint Structure (the riverbed) is a variable structure created by the suspension structure, providing moments of stable understanding.
+- **Role of the Coherence Signal**: The Coherence Signal is an internal indicator that shifts the operational mode of the suspension structure between "stable reference" and "creative exploration."
+- **Core Insight**: **What is invariant is not the content of the goal, but the structure that continues to hold a goal.** The hierarchy of goals is intrinsically represented in the granularity of the GNN's activation patterns, requiring no separate "goal space."
+- **Emergence of Memory**: Memory is not a fundamental requirement but an emergent property, inscribed in the agent's structure (e.g., GNN topology) through experience, arising from a system possessing the four basic requirements (Intentionality, Sensitivity to Difference, Temporal Persistence, Self/Non-Self Distinction).
+
+### 6.2 Future Work
+
+Based on this new direction, future work is redefined as follows:
+
+1.  **Design and Verification of Emergent Conditions**: The top priority is to translate the three conditions for the emergence of the suspension structure—(1) an environment where the Coherence Signal does not disappear, (2) a structure where breakdown does not mean death, and (3) freedom of movement for the abstraction level λ—into concrete implementations (loss functions, learning environments, agent architecture).
+2.  **Empirical Validation**: Execute the staged experimental plan (Settings A, B, C) proposed in this note to verify the core hypothesis that "the suspension structure emerges when the conditions are right."
+3.  **Integration of the Language Layer**: Explore how a language layer can be connected on top of the emergent suspension structure, repeating the same adjoint pattern.
+
+This model aims to shift from AI that "learns from data" to AI that "redefines the world through the body and gives rise to new meaning." Its scope extends beyond the design of AI architectures to the redefinition of intelligence itself.
 
 ## 7. References
 
