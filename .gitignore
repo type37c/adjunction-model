@@ -3,3 +3,7 @@
 logs/
 *.pt
 *.pth
+
+# Python cache
+__pycache__/
+*.pyc
