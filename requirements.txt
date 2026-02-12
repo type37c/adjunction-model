@@ -1,0 +1,19 @@
+# Core dependencies
+torch>=2.0.0
+torch-geometric>=2.3.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Data handling
+h5py>=3.8.0
+trimesh>=3.21.0
+open3d>=0.17.0
+
+# Visualization and logging
+matplotlib>=3.7.0
+tensorboard>=2.12.0
+tqdm>=4.65.0
+
+# Utilities
+pyyaml>=6.0
+wandb>=0.15.0

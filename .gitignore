@@ -1,0 +1,5 @@
+
+# Training logs and checkpoints
+logs/
+*.pt
+*.pth

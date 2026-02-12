@@ -1,0 +1,1 @@
+# Physical-Semantic Adjunction Model

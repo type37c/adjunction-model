@@ -10,13 +10,12 @@ A novel AI architecture that uses **adjunctions** from category theory to constr
 
 This project proposes the **Physical-Semantic Adjunction Model**, which addresses the symbol grounding problem and the lack of embodiment in current AI systems. The core idea is that the relationship between an object's shape and the actions it affords can be formally described as a **parameterized adjunction** F<sub>C</sub> ⊣ G<sub>C</sub>, where C represents the agent's full internal state (purpose, memory, physical constraints).
 
-### Key Concepts
+### Key Concepts (Updated)
 
-- **Conditional Adjunction**: The adjunction between Shape and Action only holds when parameterized by the agent's context C
-- **Coherence Signal**: An internal stability metric derived from the unit η of the adjunction, measuring `distance(shape, G(F(shape)))`
-- **Suspension Structure**: The minimal substrate of intelligence, defined by five requirements (intentionality, sensitivity to difference, temporal persistence, self/non-self distinction, memory)
-- **Two-Layer Architecture**: An Adjoint Layer (Shape ⇄ Action via dynamic GNN) coupled with an Agent Layer (C, containing purpose and memory)
-- **Creativity as Diagram Repair**: Coherence breakdown triggers creative problem-solving, formalized as the repair of a commutative diagram
+- **Adjunction F ⊣ G**: The core structure linking `Shape` and `Action`.
+- **Coherence Signal η**: `distance(shape, G(F(shape)))`. A low signal indicates a stable understanding, while a high signal indicates a breakdown, triggering a mode shift.
+- **Suspension Structure**: The substrate of intelligence, which is not designed directly but emerges from specific conditions. It operates in different modes (e.g., stable reference, creative exploration) based on the coherence signal.
+- **Emergence over Design**: The principle that the suspension structure itself should not be hardcoded. Instead, we design the conditions for its emergence.
 
 ### Relationship to Active Inference
 
@@ -29,12 +28,19 @@ The model has a strong structural correspondence with Karl Friston's Active Infe
 ```
 adjunction-model/
 ├── README.md
+├── requirements.txt
 ├── docs/
-│   ├── research_note_ja.md    # 研究ノート（日本語版）
-│   ├── research_note_en.md    # Research Note (English)
-│   ├── interim_design.md      # 中間設計文書（理論→実装の橋渡し）
-│   └── research_notes.md      # リサーチノート（先行研究調査）
-└── src/                       # (coming soon) prototype implementation
+│   ├── QUICKSTART.md          # --> For new developers: Start here!
+│   ├── DESIGN_NOTES.md        # --> Key implementation decisions (the "why")
+│   ├── DEBUGGING_GUIDE.md     # --> Common bugs and how to fix them
+│   ├── research_note_ja.md    # Core theoretical document (Japanese)
+│   └── research_note_en.md    # Core theoretical document (English)
+├── src/
+│   ├── data/                  # Data loading and generation
+│   ├── models/                # Core model components (F, G, Adjunction)
+│   └── training/              # Training loops and logic
+└── experiments/
+    └── test_coherence_signal.py # MVP experiment script
 ```
 
 ## Documents
@@ -43,8 +49,7 @@ adjunction-model/
 | :--- | :--- |
 | [Research Note (日本語)](docs/research_note_ja.md) | 理論の全体像を整合的にまとめた研究ノート |
 | [Research Note (English)](docs/research_note_en.md) | Full research note in English |
-| [Interim Design](docs/interim_design.md) | Technical specification bridging theory and implementation |
-| [Research Notes](docs/research_notes.md) | Survey of prior work (Categorical Deep Learning, Structured Active Inference, Affordance Learning, etc.) |
+
 
 ---
 
@@ -54,9 +59,24 @@ All development, especially by AI agents, MUST follow the rules outlined in [AGE
 
 ---
 
-## Status
+## Status: Phase 0-1 Complete
 
-This project is in the **theoretical formulation** stage. The next step is a minimal viable experiment using PyTorch Geometric to verify that an adjoint structure can learn bidirectional inference between shape and action by minimizing reconstruction error.
+**The project has moved from theoretical formulation to empirical validation.**
+
+A Minimum Viable Prototype (MVP) has been successfully implemented and tested. The core hypothesis—that the `coherence_signal` increases for novel shapes—has been experimentally confirmed.
+
+- **Current State**: The `F ⊣ G` adjunction structure is implemented and learns effectively.
+- **Next Step**: Proceed to **Phase 2**, which involves implementing the **Agent Layer C** (based on DreamerV3's RSSM) to enable online adaptation and more complex behaviors based on the coherence signal.
+
+## For New Developers & Agents
+
+To get started, please follow the guides in the `docs` directory in this order:
+
+1.  **[QUICKSTART.md](docs/QUICKSTART.md)**: Set up your environment and run the main experiment.
+2.  **[DESIGN_NOTES.md](docs/DESIGN_NOTES.md)**: Understand the key design decisions behind the current implementation.
+3.  **[DEBUGGING_GUIDE.md](docs/DEBUGGING_GUIDE.md)**: Familiarize yourself with common issues and their solutions.
+
+These documents are designed to quickly bring any agent up to speed on the project's status, architecture, and development workflow.
 
 ## License
 
