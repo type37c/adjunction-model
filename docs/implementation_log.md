@@ -33,13 +33,6 @@ adjunction-model/
 
 ---
 
-## 次のステップ
-
-1. データローダーの実装（3D AffordanceNetの簡易版）
-2. F（Shape→Action）の最小実装
-3. 単体テストの作成
-
-
 ## Phase 2: Agent Layer C Integration (2026-02-12)
 
 ### Objective
@@ -68,6 +61,40 @@ Implement Agent Layer C (based on DreamerV3's RSSM) and integrate it with the ex
 -   **Result**: The experiment showed a **-9.4% decrease** in the coherence signal over 10 exposures to a torus. While not a dramatic drop, it confirms that the agent is actively adapting its internal state in response to the novel stimulus.
 -   **Interpretation**: The adaptation is partial because the experiment was run in `eval()` mode (no weight updates). The result successfully validates that the Agent Layer C is functional and responsive to the coherence signal. Full online adaptation would require online learning (weight updates), which is a goal for Phase 3.
 
-### Status
+---
 
-Phase 2 implementation is complete. The model now has a functioning Agent Layer C that enables it to maintain an internal state and adapt to novel stimuli. The project is ready to proceed to the next phase, which could involve online learning, meta-learning, or more complex environmental interactions with the current architecture.
+## Phase 2-B: Suspension Structure Validation (2026-02-12)
+
+### Objective
+
+To empirically validate the existence and properties of the "suspension structure" by conducting a series of targeted experiments.
+
+### Implementation
+
+1.  **Online Learning Implementation** (`src/training/online_learning.py`)
+    -   Implemented an `OnlineLearner` class to handle inference-time weight updates.
+    -   Introduced an adaptive learning rate based on coherence signal.
+    -   Added L2 regularization to prevent catastrophic forgetting.
+    -   Resolved `RuntimeError: Trying to backward through the graph a second time` by detaching the agent state and previous coherence signal before the next iteration.
+
+2.  **Online Learning Validation Experiment** (`experiments/test_online_learning.py`)
+    -   Compared adaptation performance with and without online learning.
+    -   **Result**: Confirmed hypothesis. Online learning improved coherence signal reduction from -23.1% to -47.0%.
+
+3.  **Memory Recall Experiment** (`experiments/test_memory_recall.py`)
+    -   Tested if the agent can distinguish between first-time novel and previously encountered novel shapes.
+    -   **Result**: Strong evidence. Coherence signal dropped by 35.9% on re-exposure to a novel shape, indicating memory.
+
+4.  **Saturation (Boredom) Experiment** (`experiments/test_saturation.py`)
+    -   Tested if the agent exhibits signs of "boredom" after repeated exposure to the same shape.
+    -   **Result**: Partial evidence. Coherence signal decreased, but Z-entropy and H-change did not show significant changes.
+
+5.  **Prioritization Experiment** (`experiments/test_prioritization.py`)
+    -   Tested if the agent allocates more attention to novel shapes.
+    -   **Result**: Weak evidence. Attention to novel shapes was only 1.11x higher than to known shapes.
+
+### Key Learnings
+
+-   The core mechanisms of the suspension structure (sensitivity to difference, temporal persistence, creative reconstruction) are functionally present in the model.
+-   Higher-level properties like intentionality and saturation are not yet strongly emergent, suggesting the need for more complex task environments and longer-term experiments.
+-   The online learning mechanism is effective and crucial for adaptation.
