@@ -98,3 +98,25 @@ To empirically validate the existence and properties of the "suspension structur
 -   The core mechanisms of the suspension structure (sensitivity to difference, temporal persistence, creative reconstruction) are functionally present in the model.
 -   Higher-level properties like intentionality and saturation are not yet strongly emergent, suggesting the need for more complex task environments and longer-term experiments.
 -   The online learning mechanism is effective and crucial for adaptation.
+
+---
+
+## Phase 2-C: Priority-based Attention (2026-02-12)
+
+**Objective**: Implement the principle of intentionality `priority = coherence × uncertainty` to improve Agent C.
+
+**Key Implementations**:
+- **Spatial Coherence Signal**: Modified `AdjunctionModel` to return per-point coherence signals, providing Agent C with information about *what* is broken.
+- **Priority Computation**: Created a new module `src/models/priority.py` to calculate priority scores based on the theoretical principle.
+- **Agent Layer C v2**: Developed `src/models/agent_layer_v2.py`, which integrates:
+    - Spatial coherence input
+    - Priority computation
+    - An attention mechanism that weights observations based on priority.
+- **Integration Test**: Created `tests/test_agent_c_v2_integration.py` to verify that the entire pipeline works and that the attention mechanism correctly allocates focus to high-priority points.
+
+**Key Findings**:
+- The integration test passed successfully.
+- The attention mechanism correctly allocated **4.54x** more attention to the top 10% of high-priority points compared to the average.
+- This confirms that the architectural foundation for intentionality is now in place.
+
+**Next Steps**: Re-run the intentionality and saturation experiments using Agent C v2 to verify theoretical improvements.

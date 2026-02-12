@@ -118,12 +118,87 @@ class AdjunctionModel(nn.Module):
         
         return chamfer_dist
     
+    def chamfer_distance_spatial(
+        self,
+        pc1: torch.Tensor,
+        pc2: torch.Tensor,
+        batch1: Optional[torch.Tensor] = None,
+        batch2: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        Compute per-point Chamfer distance (spatial decomposition of coherence signal).
+        
+        For each point in pc1, compute the minimum distance to any point in pc2.
+        This provides spatial information about "where" the breakdown occurs.
+        
+        Args:
+            pc1: (N1, 3) or (B, N1, 3) first point cloud
+            pc2: (N2, 3) or (B, N2, 3) second point cloud (typically from G, already batched)
+            batch1: (N1,) batch assignment for pc1 (if unbatched input)
+            batch2: Ignored (pc2 is assumed to be batched)
+        
+        Returns:
+            distance: (N1,) per-point coherence signal
+        """
+        # pc2 is already batched from G output: (B, N2, 3)
+        # pc1 needs to be batched if it's not
+        
+        if pc2.dim() == 3:
+            # pc2 is already batched
+            if pc1.dim() == 2:
+                # pc1 needs batching
+                if batch1 is None:
+                    pc1 = pc1.unsqueeze(0)
+                    batch1 = torch.zeros(pc1.size(1), dtype=torch.long, device=pc1.device)
+                else:
+                    # Group by batch
+                    batch_size = batch1.max().item() + 1
+                    pc1_batched = []
+                    
+                    for b in range(batch_size):
+                        pc1_batched.append(pc1[batch1 == b])
+                    
+                    # Pad to same length
+                    max_len1 = max(p.size(0) for p in pc1_batched)
+                    
+                    pc1 = torch.stack([
+                        torch.cat([p, torch.zeros(max_len1 - p.size(0), 3, device=p.device)], dim=0)
+                        for p in pc1_batched
+                    ])
+        else:
+            # Both unbatched
+            if pc1.dim() == 2 and pc2.dim() == 2:
+                pc1 = pc1.unsqueeze(0)
+                pc2 = pc2.unsqueeze(0)
+                if batch1 is None:
+                    batch1 = torch.zeros(pc1.size(1), dtype=torch.long, device=pc1.device)
+        
+        B = pc1.size(0)
+        N1 = pc1.size(1)
+        N2 = pc2.size(1)
+        
+        # Compute pairwise distances
+        # pc1: (B, N1, 3), pc2: (B, N2, 3)
+        # dist: (B, N1, N2)
+        pc1_expanded = pc1.unsqueeze(2)  # (B, N1, 1, 3)
+        pc2_expanded = pc2.unsqueeze(1)  # (B, 1, N2, 3)
+        dist = torch.sum((pc1_expanded - pc2_expanded) ** 2, dim=-1)  # (B, N1, N2)
+        
+        # Per-point minimum distance to reconstructed shape
+        dist_per_point = torch.min(dist, dim=2)[0]  # (B, N1)
+        
+        # Flatten to (N1,) using batch assignment
+        dist_per_point_flat = dist_per_point.reshape(-1)  # (B * N1,)
+        
+        return dist_per_point_flat
+    
     def compute_coherence_signal(
         self,
         original_shape: torch.Tensor,
         reconstructed_shape: torch.Tensor,
         batch_original: Optional[torch.Tensor] = None,
-        batch_reconstructed: Optional[torch.Tensor] = None
+        batch_reconstructed: Optional[torch.Tensor] = None,
+        return_spatial: bool = False
     ) -> torch.Tensor:
         """
         Compute coherence signal η = distance(shape, G(F(shape))).
@@ -136,15 +211,23 @@ class AdjunctionModel(nn.Module):
             reconstructed_shape: (M, 3) or (B, M, 3) reconstructed point cloud
             batch_original: (N,) batch assignment for original
             batch_reconstructed: (M,) batch assignment for reconstructed
+            return_spatial: If True, return per-point coherence instead of scalar
         
         Returns:
-            coherence: (B,) coherence signal per sample
+            coherence: (B,) coherence signal per sample if return_spatial=False,
+                      (N,) per-point coherence if return_spatial=True
         """
         if self.distance_metric == 'chamfer':
-            distance = self.chamfer_distance(
-                original_shape, reconstructed_shape,
-                batch_original, batch_reconstructed
-            )
+            if return_spatial:
+                distance = self.chamfer_distance_spatial(
+                    original_shape, reconstructed_shape,
+                    batch_original, batch_reconstructed
+                )
+            else:
+                distance = self.chamfer_distance(
+                    original_shape, reconstructed_shape,
+                    batch_original, batch_reconstructed
+                )
         else:
             raise NotImplementedError(f"Distance metric '{self.distance_metric}' not implemented")
         
