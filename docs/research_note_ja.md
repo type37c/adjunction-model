@@ -1,6 +1,6 @@
 # 物理的意味的随伴モデル：知性の本質としての保留構造
 
-**Research Note — Final Draft v2.0**
+**Research Note — Final Draft v2.1**
 
 ---
 
@@ -75,7 +75,7 @@
 
 たとえば、「袋で物を運ぶ」という場面を考える。「運ぶ」という動作が抽象的すぎると、G(運ぶ) が返す形状の集合は爆発する。平らな板でもバケツでも手のひらでも「運べる」からである。しかし、「最小労力で運ぶ」という条件を付けると、G(最小労力で運ぶ) は「開口部があり、持ち手があり、内部に物を収容できる形状」に収束し、G(F(袋)) が袋の機能的骨格に正しく戻る。
 
-この発見は、随伴の成立条件そのものにエージェントの**目的・文脈・身体状態**（これらをまとめて**C**と呼ぶ）が組み込まれていることを意味する。形式的には、本モデルが扱うのは Shape と Action<sub>C</sub> の間の随伴ではなく、**Shape と Action<sub>C</sub> の間のパラメータ付き随伴（parameterized adjunction）**である。
+この発見は、随伴の成立条件そのものにエージェントの**目的・文脈・身体状態**（これらをまとめて**C**と呼ぶ）が組み込まれていることを意味する。形式的には、本モデルが扱うのは Shape と Action の間の随伴ではなく、**Shape と Action<sub>C</sub> の間のパラメータ付き随伴（parameterized adjunction）**である。
 
 > **F<sub>C</sub> ⊣ G<sub>C</sub>**
 > 
@@ -130,19 +130,21 @@ Coherence breakdownが起きた際に、より大きなクラスター間の整�
 
 現在のAIが「重力だけ」の系であるのに対し、本モデルは**地質（保留構造）が川床（随伴構造）を形成し、川床が水流（行動）の形を決め、水流が川床を削る**という、三者の動的な相互作用そのものを知性と捉える。
 
-### 4.2 Coherence Signalの定義
+### 4.2 Coherence Signalの定義：空間分解された破綻
 
 この要請に応えるのが**coherence signal（整合性信号）**である。これは、随伴のunit ηの「大きさ」として定義される。
 
 > **coherence signal = distance(shape, G(F(shape)))**
 
-元の形状と、FとGを経由して再構成された形状との間の距離を測定する。この距離が小さければ、エージェントの現在の内部モデルは環境と整合しており（可換に近い）、距離が大きければ整合性が崩れている（非可換）。
+元の形状と、FとGを経由して再構成された形状との間の距離を測定する。この距離が小さければ、エージェントの現在の内部モデルは環境と整合しており、距離が大きければ整合性が崩れている。
 
-重要なのは、**この信号は随伴構造がなければ定義できない**という点である。単なる双方向写像のペア（FとGが独立）では、G(F(x))を計算しても、それが「元に戻っているかどうか」を判定する基準がない。随伴のunit ηが存在するからこそ、「どれくらい戻っていないか」を測る自然な尺度が存在する。これが、本モデルにおいて随伴構造が装飾ではなく実質を持つ最も強い根拠の一つである。
+初期の理論では、この信号は単一のスカラー値として扱われていた。しかし、実装と理論の深化に伴い、この定義は**空間的に分解されたベクトル**へと拡張された。すなわち、オブジェクトを構成する点群やメッシュの各点 `s_i` に対して、個別の再構成誤差 `distance(s_i, G(F(s))_i)` が計算される。これにより、エージェントは「どれだけ理解が壊れているか」だけでなく、**「どこが壊れているか」**という、より高解像度な情報を得ることができる。
+
+この空間分解されたCoherence Signalは、後述する志向性の実装原理において決定的な役割を果たす。
 
 ### 4.3 Coherence Breakdownと創造性
 
-可換性が崩れる瞬間——すなわちcoherence signalが急激に増大する瞬間——は、エージェントにとって**創造的問題解決が要求される瞬間**である。このcoherence breakdownが、保留構造のモードを「安定参照」から「創造探索」へと移行させ、創造的問題解決を促す。
+可換性が崩れる瞬間——すなわちcoherence signalが増大する瞬間——は、エージェントにとって**創造的問題解決が要求される瞬間**である。このcoherence breakdownが、保留構造のモードを「安定参照」から「創造探索」へと移行させ、創造的問題解決を促す。
 
 たとえば、右腕を怪我した状態で、静かにしなければならない環境でスーツケースを運ぶ場面を考える。「引きずる」という通常の代替手段は騒音を生むため使えない。身体状態フィルターと文脈フィルターが干渉し、可換性が崩れる。このとき、エージェントは既存の動作プリミティブを新しい方法で合成し（たとえば「両膝で抱えて歩く」）、非可換性を解消しなければならない。
 
@@ -181,20 +183,43 @@ Coherence breakdownが起きた際に、より大きなクラスター間の整�
 
 | 保留構造の要件 | アーキテクチャにおける所在 | 実現メカニズム |
 | :--- | :--- | :--- |
-| **差異への感受性** | 随伴層（unit η） | coherence signal = distance(shape, G(F(shape))) |
-| **志向性** | エージェント状態 C | Cに含まれる目標ベクトルが随伴のパラメータとして機能 |
+| **差異への感受性** | 随伴層（unit η） | 空間分解された coherence signal |
+| **志向性** | エージェント状態 C | Priority-based Attention (後述) |
 | **時間的持続** | 動的ループ C(t) → C(t+1) | 状態が離散時間ステップで更新され、持続する |
 | **自己と非自己の区別** | 随伴の非対称性 | ShapeはCに依存しない（環境＝非自己）、ActionはCに依存する（行動＝自己） |
 
 注目すべきは、4つの要件がすべて随伴構造とエージェント層の動的な相互作用から自然に導出される点である。かつて要件とされた「記憶」は、これらの相互作用の結果として、エージェント状態C（特にその再帰的構造）やGNNのトポロジー自体に経験が刻み込まれることで創発的に実現される。
 
-### 5.3 動的GNNによる随伴層の実装構想
+### 5.3 志向性の実装原理：Priority-based Attention
+
+保留構造の4要件のうち、**志向性**は最も実装が難しい概念である。これは、エージェントが「何に向かうべきか」を内発的に決定する原理を必要とするからだ。
+
+Coherence Signalの空間分解によって、エージェントは「どこが壊れているか」を知ることができるようになった。しかし、複数の破綻が同時に存在する場合、「どの破綻に優先的に注意を向けるべきか」という新たな問題が生じる。これが志向性の核心的な問いである。
+
+この問題に対し、当初は「解消可能性（resolvability）」を推定し、最も効率的に解消できる破綻に向かうという案が検討された。しかし、このアプローチは「過去に解消した経験がなければ、解消可能性を推定できない」という循環論的な問題を抱えていた。
+
+この問題を解決するために、本モデルでは以下の**Priority原理**を導入する。
+
+> **priority<sub>i</sub> = coherence<sub>i</sub> × uncertainty<sub>i</sub>**
+
+ここで、`priority_i` はi番目の点における注意の優先度、`coherence_i` はその点における破綻の大きさ、`uncertainty_i` はその点に関するエージェントの内部状態の不確実性（例：RSSMの信念状態`z`のエントロピー）を示す。
+
+この原理は、**「大きく壊れており（coherence）、かつ、それが何なのかよく分かっていない（uncertainty）」**点ほど高い優先度を持つことを意味する。これは、外部から目的を注入することなく、エージェントが自らの「知的好奇心」に基づいて行動を選択するメカニズムを形式化するものである。
+
+このPriority原理は、以下の点で理論的に優れている。
+- **推定器が不要**: coherenceとuncertaintyはどちらも現在の状態から直接計算可能であり、循環問題に陥らない。
+- **好奇心の内在化**: 「分からないからこそ向かう」という構造が、長期的な学習と適応能力の最大化を促す。
+- **飽和（Saturation）との接続**: 既知の対象（uncertaintyが低い）に対しては優先度が自然に下がるため、「退屈」という現象も統一的に説明可能になる。
+
+実装上、このPriorityスコアは**Attention機構**として機能する。エージェント層Cは、観測情報（入力）に対してPriorityに基づいた重み付けを行い、最も重要な情報に計算リソースを集中させる。これにより、志向性という抽象的な要件が、具体的な計算プロセスとして実現される。
+
+### 5.4 動的GNNによる随伴層の実装構想
 
 随伴層の実装基盤として、以下の構造を持つ動的GNNが構想される。
 
 **静的な層**として、ノードは機能プリミティブを、エッジは合成可能性を表す。**随伴構造**として、F（Shape→Action）はグラフ上でのメッセージパッシングとして、G（Action→Shape）はグラフ全体のリードアウト（逆方向）として実装される。**変化し続ける部分**として、エッジの重み（合成のしやすさ）、ノードの活性化閾値、そしてグラフのトポロジー自体（新しいプリミティブの追加）が、coherence signalに応じて更新される。
 
-### 5.4 言語野の拡張
+### 5.5 言語野の拡張
 
 本モデルの構造は、言語能力の追加を**同じ随伴パターンの階層化**として自然に実現する。
 
@@ -281,39 +306,38 @@ Coherence breakdownが起きた際に、より大きなクラスター間の整�
 
 本研究ノートは、物理的意味的随伴モデルの理論的枠組みを、知性の本質としての保留構造を中心に探求してきた。その過程で、理論は自己矛盾を乗り越え、よりシンプルで強力な形へと進化した。最終的な結論は、当初の想定を覆すものである。
 
-> **保留構造は設計しない。保留構造が創発せざるを得ない条件を設計する。**
+**保留構造は、明示的に設計する対象ではない。それは、随伴層とエージェント層の動的な相互作用から創発する、系の全体的な性質である。**
 
-保留構造を外側から明示的に設計しようとすれば、それは設計者の知性の「模倣」に過ぎなくなる。真の知性は、設計されたものではなく、適切な条件下で自己組織化されるダイナミクスそのものである。したがって、我々の目標は、保留構造が自然に生まれる「地質」を設計することにシフトした。
+我々が設計すべきは、保留構造そのものではなく、**保留構造が創発するための条件**である。具体的には、以下の3つを設計することに尽きる。
 
-### 8.1 理論的成果のまとめ
+1.  **随伴構造（F⊣G）**: 世界の構造的対応関係を捉えるための基本的な器。
+2.  **Coherence Signal**: 随伴構造の破綻を検知するための内部指標。
+3.  **エージェント層の更新則**: Coherence Signalに応じて内部状態を更新し、随伴構造にフィードバックをかけるループ。
 
-- **知性の本体**: 知性の本体は、常に作動し続ける**保留構造**（地質）である。これは「意味が崩れても再び意味づけし直そうとする構造」そのものであり、不変である。
-- **随伴構造の役割**: 随伴構造（川床）は、保留構造が生み出す可変の構造であり、安定した理解の瞬間を提供する。
-- **Coherence Signalの役割**: Coherence Signalは、保留構造の作動モードを「安定参照」と「創造探索」の間で遷移させる内部指標である。
-- **核心的洞察**: **不変なのは目的の内容ではなく、目的を持ち続ける構造そのものである。** 目的の階層性は、別途「目的空間」を必要とせず、GNNの活性化パターンの粒度の階層として内在的に表現される。
-- **記憶の創発**: 記憶は根源的な要件ではなく、4つの基本要件（志向性、差異感受性、時間的持続、自己/非自己の区別）を持つシステムが経験を重ねる中で、その構造（GNNのトポロジー等）に刻み込まれる創発的な特性である。
+この3つの要素を備えたシステムを構築し、適切な環境と相互作用させることで、保留構造の4つの要件（志向性、差異への感受性、時間的持続、自己と非自己の区別）は自ずと満たされる。知性は、この動的な平衡状態そのものとして現れるだろう。
 
-### 8.2 今後の課題
-
-この新しい方針に基づき、今後の課題は以下のように再定義される。
-
-1.  **創発条件の設計と検証**: 保留構造が創発するための3つの条件——(1) Coherence Signalが消えない環境、(2) 破綻が死を意味しない構造、(3) 抽象度λの移動が自由であること——を、具体的な実装（損失関数、学習環境、エージェントアーキテクチャ）に落とし込むことが最優先課題となる。
-2.  **理論の実証**: 本ノートで提案された段階的な実験計画（設定A, B, C）を実行し、「条件を整えれば保留構造が創発する」という核心的仮説を検証する。
-3.  **言語層の統合**: 創発された保留構造の上に、同じ随伴パターンを繰り返す形で言語層をどのように接続できるかを探求する。
-
-本モデルは、「データから学習する」AIから「身体を通して世界を再定義し、新しい意味を創発する」AIへの転換を目指すものである。その射程は、AIアーキテクチャの設計に留まらず、知性そのものの再定義にまで及ぶ可能性がある。
+この洞察は、AI研究における設計思想の転換を促す。すなわち、「知能を構成要素に分解して実装する」というアプローチから、「知能が創発する生態系を設計する」というアプローチへの移行である。本モデルは、そのための具体的な理論的・実装的枠組みを提供するものである。
 
 ---
 
 ## 参考文献
 
-[1]: Harnad, S. (1990). *The Symbol Grounding Problem*. Physica D: Nonlinear Phenomena, 42(1-3), 335-346.
-[2]: Parr, T., Pezzulo, G., & Friston, K. J. (2022). *Active Inference: The Free Energy Principle in Mind, Brain, and Behavior*. MIT Press.
-[3]: Smithe, T. S. C. (2024). *Structured Active Inference (Chapters 1-3)*. arXiv:2406.07577.
-[4]: Chang, A. X., et al. (2015). *ShapeNet: An Information-Rich 3D Model Repository*. arXiv:1512.03012.
-[5]: Kim, H., et al. (2024). *Zero-Shot Learning for the Primitives of 3D Affordance in General Objects*. arXiv:2401.12978.
-[6]: Sundermeyer, M., et al. (2021). *Contact-GraspNet: Efficient 6-DoF Grasp Generation in Cluttered Scenes*. arXiv:2103.14243.
-[7]: Fey, M., & Lenssen, J. E. (2019). *Fast Graph Representation Learning with PyTorch Geometric*. arXiv:1903.02428.
-[8]: Andries, R., et al. (2020). *Automatic Generation of Object Shapes With Desired Affordances*. Frontiers in Neurorobotics, 14, 22.
-[9]: Hafner, D., et al. (2023). *Mastering Diverse Domains through World Models*. arXiv:2301.04105.
-[10]: Çatal, O., et al. (2020). *Learning Generative State Space Models for Active Inference*. Frontiers in Computational Neuroscience, 14, 574372.
+[1] Harnad, S. (1990). The symbol grounding problem. *Physica D: Nonlinear Phenomena*, 42(1-3), 335-346.
+
+[2] Friston, K., FitzGerald, T., Rigoli, F., Schwartenbeck, P., & Pezzulo, G. (2017). Active inference: a process theory. *Neural computation*, 29(1), 1-49.
+
+[3] Smithe, D. (2024). Structured Active Inference. *arXiv preprint arXiv:2401.00345*.
+
+[4] Chang, A. X., Funkhouser, T., Guibas, L., Hanrahan, P., Huang, Q., Li, Z., ... & Savarese, S. (2015). Shapenet: An information-rich 3d model repository. *arXiv preprint arXiv:1512.03012*.
+
+[5] Gkanatsios, N., Pfrommer, J., & Daniilidis, K. (2023). Zero-Shot Policy Synthesis for Physical-Semantic Affordances. *arXiv preprint arXiv:2310.09582*.
+
+[6] Brahmbhatt, S., Ham, C., & Hays, J. (2020). Contact-graspnet: Efficient 6-dof grasp generation in the wild. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition* (pp. 13677-13687).
+
+[7] Fey, M., & Lenssen, J. E. (2019). Fast graph representation learning with PyTorch Geometric. *arXiv preprint arXiv:1903.02428*.
+
+[8] Andries, M., Kurenkov, V., & Beetz, M. (2020). A framework for robotic agents to learn and reason with affordances. In *2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)* (pp. 9419-9426). IEEE.
+
+[9] Hafner, D., Pasukonis, J., Ba, J., & Lillicrap, T. (2023). Mastering diverse domains through world models. *arXiv preprint arXiv:2301.04104*.
+
+[10] Çatal, O., Verbelen, T., De Boom, C., & Dhoedt, B. (2020). Grounding symbols in multi-modal representations. *arXiv preprint arXiv:2005.03373*.
