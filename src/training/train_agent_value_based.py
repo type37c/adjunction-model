@@ -56,7 +56,7 @@ class ValueBasedAgentTrainer:
         gamma: float = 0.99,
         episode_length: int = 5,
         value_update_freq: int = 1,  # Update value every N steps
-        agent_update_freq: int = 5   # Update agent every N steps
+        agent_update_freq: int = 1   # Update agent every N steps
     ):
         """
         Args:
@@ -101,79 +101,21 @@ class ValueBasedAgentTrainer:
         # Training statistics
         self.step_count = 0
     
-    def train_epoch(
-        self,
-        dataloader: DataLoader,
-        epoch: int
-    ) -> Dict[str, float]:
+    def train_episode(self, batch: torch.Tensor) -> Dict[str, float]:
         """
-        Train for one epoch.
+        Train on a single episode (batch of shapes).
         
-        Alternates between:
-        1. Updating value function (TD learning)
-        2. Updating Agent C (maximize value)
+        Args:
+            batch: (batch_size, num_points, 3) tensor of point clouds
+        
+        Returns:
+            Dictionary of metrics
         """
         self.model.train()
         self.value_function.train()
         
-        total_intrinsic_reward = 0.0
-        total_value = 0.0
-        total_value_loss = 0.0
-        total_agent_loss = 0.0
-        total_coherence = 0.0
-        num_episodes = 0
+        batch_size = batch.size(0)
         
-        episode_buffer = []
-        
-        for batch_idx, batch_data in enumerate(dataloader):
-            episode_buffer.append(batch_data)
-            
-            if len(episode_buffer) >= self.episode_length:
-                episode_metrics = self._train_episode(episode_buffer[:self.episode_length])
-                
-                total_intrinsic_reward += episode_metrics['intrinsic_reward']
-                total_value += episode_metrics['value']
-                total_value_loss += episode_metrics['value_loss']
-                total_agent_loss += episode_metrics['agent_loss']
-                total_coherence += episode_metrics['coherence']
-                num_episodes += 1
-                
-                episode_buffer = episode_buffer[self.episode_length:]
-                
-                if num_episodes % 10 == 0:
-                    print(f"  Episode {num_episodes}: "
-                          f"R={episode_metrics['intrinsic_reward']:.4f}, "
-                          f"V={episode_metrics['value']:.4f}, "
-                          f"Coherence={episode_metrics['coherence']:.4f}")
-        
-        if num_episodes > 0:
-            return {
-                'intrinsic_reward': total_intrinsic_reward / num_episodes,
-                'value': total_value / num_episodes,
-                'value_loss': total_value_loss / num_episodes,
-                'agent_loss': total_agent_loss / num_episodes,
-                'coherence': total_coherence / num_episodes
-            }
-        else:
-            return {
-                'intrinsic_reward': 0.0,
-                'value': 0.0,
-                'value_loss': 0.0,
-                'agent_loss': 0.0,
-                'coherence': 0.0
-            }
-    
-    def _train_episode(
-        self,
-        episode_data: List[Dict]
-    ) -> Dict[str, float]:
-        """
-        Train on a single episode.
-        
-        Two-phase training:
-        1. TD learning: update value function based on intrinsic rewards
-        2. Value maximization: update Agent C to maximize V(state)
-        """
         # Initialize
         agent_state = self.model.initial_state(1, self.device)
         coherence_signal_prev = torch.zeros(1, 1, device=self.device)
@@ -181,17 +123,21 @@ class ValueBasedAgentTrainer:
         # Store trajectory
         trajectory = []
         
-        # Phase 1: Collect trajectory and update value function
-        episode_intrinsic_reward = 0.0
-        episode_value = 0.0
-        episode_value_loss = 0.0
-        episode_coherence = 0.0
+        # Metrics
+        total_reward = 0.0
+        total_coherence = 0.0
+        total_uncertainty = 0.0
+        total_valence = 0.0
+        r_curiosity_sum = 0.0
+        r_competence_sum = 0.0
+        r_novelty_sum = 0.0
+        r_intrinsic_sum = 0.0
         
-        for step_idx, batch_data in enumerate(episode_data):
-            # Extract data
-            points = batch_data['points'][0].to(self.device)
+        # Phase 1: Collect trajectory
+        for step_idx in range(batch_size):
+            points = batch[step_idx]  # (num_points, 3)
             num_points = points.size(0)
-            batch = torch.zeros(num_points, dtype=torch.long, device=self.device)
+            batch_indices = torch.zeros(num_points, dtype=torch.long, device=self.device)
             
             # Previous spatial coherence
             if step_idx == 0:
@@ -199,16 +145,19 @@ class ValueBasedAgentTrainer:
             else:
                 coherence_spatial_prev = results['coherence_spatial'].detach()
             
-            # Forward pass (no gradient for now, just collecting trajectory)
+            # Forward pass (no gradient for trajectory collection)
             with torch.no_grad():
                 results = self.model(
-                    points, batch, agent_state,
+                    points, batch_indices, agent_state,
                     coherence_signal_prev, coherence_spatial_prev
                 )
             
-            # Extract intrinsic reward
+            # Extract metrics
             agent_info = results['rssm_info']
-            R_intrinsic = agent_info.get('R_intrinsic', torch.zeros(1, device=self.device)).mean()
+            R_intrinsic = agent_info.get('R_intrinsic', torch.tensor(0.0, device=self.device))
+            R_curiosity = agent_info.get('R_curiosity', torch.tensor(0.0, device=self.device))
+            R_competence = agent_info.get('R_competence', torch.tensor(0.0, device=self.device))
+            R_novelty = agent_info.get('R_novelty', torch.tensor(0.0, device=self.device))
             
             # Compute value
             value = self.value_function(results['agent_state'])
@@ -216,104 +165,108 @@ class ValueBasedAgentTrainer:
             # Store trajectory
             trajectory.append({
                 'state': {k: v.clone() for k, v in results['agent_state'].items()},
-                'reward': R_intrinsic.item(),
+                'reward': R_intrinsic.item() if isinstance(R_intrinsic, torch.Tensor) else R_intrinsic,
                 'value': value.mean().item(),
                 'coherence': results['coherence_signal'].mean().item(),
+                'uncertainty': agent_info.get('uncertainty', torch.tensor(0.0)).item(),
+                'valence': agent_info.get('valence_mean', torch.tensor(0.0)).item(),
                 'points': points,
-                'batch': batch,
+                'batch': batch_indices,
                 'coherence_signal_prev': coherence_signal_prev.clone(),
                 'coherence_spatial_prev': coherence_spatial_prev.clone()
             })
             
-            episode_intrinsic_reward += R_intrinsic.item()
-            episode_value += value.mean().item()
-            episode_coherence += results['coherence_signal'].mean().item()
+            # Accumulate metrics
+            total_reward += R_intrinsic.item() if isinstance(R_intrinsic, torch.Tensor) else R_intrinsic
+            total_coherence += results['coherence_signal'].mean().item()
+            total_uncertainty += agent_info.get('uncertainty', torch.tensor(0.0)).item()
+            total_valence += agent_info.get('valence_mean', torch.tensor(0.0)).item()
+            r_curiosity_sum += R_curiosity.item() if isinstance(R_curiosity, torch.Tensor) else R_curiosity
+            r_competence_sum += R_competence.item() if isinstance(R_competence, torch.Tensor) else R_competence
+            r_novelty_sum += R_novelty.item() if isinstance(R_novelty, torch.Tensor) else R_novelty
+            r_intrinsic_sum += R_intrinsic.item() if isinstance(R_intrinsic, torch.Tensor) else R_intrinsic
             
             # Update for next step
             agent_state = results['agent_state']
             coherence_signal_prev = results['coherence_signal']
         
         # Phase 2: Update value function using TD learning
+        td_loss_sum = 0.0
         for t in range(len(trajectory) - 1):
-            if self.step_count % self.value_update_freq == 0:
-                state_t = trajectory[t]['state']
-                reward_t = torch.tensor([trajectory[t]['reward']], device=self.device)
-                state_t1 = trajectory[t + 1]['state']
-                done = torch.zeros(1, device=self.device)
-                
-                value_loss = self.td_learner.update(state_t, reward_t, state_t1, done)
-                episode_value_loss += value_loss
+            state_t = trajectory[t]['state']
+            reward_t = torch.tensor([trajectory[t]['reward']], device=self.device)
+            state_t1 = trajectory[t + 1]['state']
+            done = torch.zeros(1, device=self.device)
             
-            self.step_count += 1
+            td_loss = self.td_learner.update(state_t, reward_t, state_t1, done)
+            td_loss_sum += td_loss
         
         # Last step (terminal)
         if len(trajectory) > 0:
             state_t = trajectory[-1]['state']
             reward_t = torch.tensor([trajectory[-1]['reward']], device=self.device)
-            # Terminal state: V(s_{t+1}) = 0
             state_t1 = {k: torch.zeros_like(v) for k, v in state_t.items()}
             done = torch.ones(1, device=self.device)
             
-            value_loss = self.td_learner.update(state_t, reward_t, state_t1, done)
-            episode_value_loss += value_loss
+            td_loss = self.td_learner.update(state_t, reward_t, state_t1, done)
+            td_loss_sum += td_loss
         
         # Phase 3: Update Agent C to maximize V(state)
-        episode_agent_loss = 0.0
+        agent_state = self.model.initial_state(1, self.device)
+        coherence_signal_prev = torch.zeros(1, 1, device=self.device)
         
-        if self.step_count % self.agent_update_freq == 0:
-            # Reset agent state
-            agent_state = self.model.initial_state(1, self.device)
-            coherence_signal_prev = torch.zeros(1, 1, device=self.device)
+        total_value = 0.0
+        
+        for step_idx, step_data in enumerate(trajectory):
+            points = step_data['points']
+            batch_indices = step_data['batch']
+            coherence_spatial_prev = step_data['coherence_spatial_prev']
             
-            # Forward pass with gradient
-            total_value = 0.0
+            # Forward (with gradient)
+            results = self.model(
+                points, batch_indices, agent_state,
+                coherence_signal_prev, coherence_spatial_prev
+            )
             
-            for step_idx, step_data in enumerate(trajectory):
-                points = step_data['points']
-                batch = step_data['batch']
-                coherence_spatial_prev = step_data['coherence_spatial_prev']
-                
-                # Forward (with gradient)
-                results = self.model(
-                    points, batch, agent_state,
-                    coherence_signal_prev, coherence_spatial_prev
-                )
-                
-                # Compute value
-                value = self.value_function(results['agent_state'])
-                total_value = total_value + value.mean()
-                
-                # Update for next step
-                agent_state = {k: v.detach() for k, v in results['agent_state'].items()}
-                coherence_signal_prev = results['coherence_signal'].detach()
+            # Compute value
+            value = self.value_function(results['agent_state'])
+            total_value = total_value + value.mean()
             
-            # Loss: negative value (we want to maximize value)
-            agent_loss = -total_value / len(trajectory)
-            
-            # Backward
-            self.agent_optimizer.zero_grad()
-            if self.fg_optimizer is not None:
-                self.fg_optimizer.zero_grad()
-            
-            agent_loss.backward()
-            
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(self.model.agent_c.parameters(), max_norm=10.0)
-            
-            self.agent_optimizer.step()
-            if self.fg_optimizer is not None:
-                self.fg_optimizer.step()
-            
-            episode_agent_loss = agent_loss.item()
+            # Update for next step (detach to avoid backprop through time)
+            agent_state = {k: v.detach() for k, v in results['agent_state'].items()}
+            coherence_signal_prev = results['coherence_signal'].detach()
+        
+        # Loss: negative value (we want to maximize value)
+        agent_loss = -total_value / len(trajectory)
+        
+        # Backward
+        self.agent_optimizer.zero_grad()
+        if self.fg_optimizer is not None:
+            self.fg_optimizer.zero_grad()
+        
+        agent_loss.backward()
+        
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(self.model.agent_c.parameters(), max_norm=10.0)
+        
+        self.agent_optimizer.step()
+        if self.fg_optimizer is not None:
+            self.fg_optimizer.step()
         
         # Return metrics
         num_steps = len(trajectory)
         return {
-            'intrinsic_reward': episode_intrinsic_reward / num_steps,
-            'value': episode_value / num_steps,
-            'value_loss': episode_value_loss / num_steps,
-            'agent_loss': episode_agent_loss,
-            'coherence': episode_coherence / num_steps
+            'total_reward': total_reward / num_steps,
+            'avg_coherence': total_coherence / num_steps,
+            'avg_uncertainty': total_uncertainty / num_steps,
+            'avg_valence': total_valence / num_steps,
+            'value_start': trajectory[0]['value'] if trajectory else 0.0,
+            'value_end': trajectory[-1]['value'] if trajectory else 0.0,
+            'td_loss': td_loss_sum / num_steps,
+            'r_curiosity': r_curiosity_sum / num_steps,
+            'r_competence': r_competence_sum / num_steps,
+            'r_novelty': r_novelty_sum / num_steps,
+            'r_intrinsic': r_intrinsic_sum / num_steps,
         }
 
 

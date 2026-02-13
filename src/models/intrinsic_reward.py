@@ -41,10 +41,11 @@ class IntrinsicRewardComputation(nn.Module):
     
     def __init__(
         self,
-        alpha_curiosity: float = 0.3,
-        beta_competence: float = 0.5,
-        gamma_novelty: float = 0.2,
-        novelty_scale: float = 0.1
+        alpha_curiosity: float = 0.0,  # Disabled due to sign issue
+        beta_competence: float = 0.6,
+        gamma_novelty: float = 0.4,
+        novelty_scale: float = 0.1,
+        competence_scale: float = 100.0  # Scale up competence reward
     ):
         """
         Args:
@@ -59,6 +60,7 @@ class IntrinsicRewardComputation(nn.Module):
         self.beta = beta_competence
         self.gamma = gamma_novelty
         self.novelty_scale = novelty_scale
+        self.competence_scale = competence_scale
     
     def forward(
         self,
@@ -90,10 +92,10 @@ class IntrinsicRewardComputation(nn.Module):
         # Normalize to [0, 1] range (approximately)
         R_curiosity = torch.tanh(R_curiosity / 10.0)  # Scale down large values
         
-        # (2) Competence reward: improvement in coherence (when attended)
-        # Positive when coherence decreases (breakdown resolved) AND we attended to it
-        delta_coherence = coherence_prev - coherence_curr  # (B, 1)
-        R_competence = delta_coherence * attention_weight  # (B, 1)
+        # (2) Competence reward: attending to breakdowns (v2 - redesigned)
+        # Positive when we attend to large breakdowns (engage with difficulty)
+        # This is appropriate when F/G are frozen and cannot reduce breakdowns
+        R_competence = coherence_curr * attention_weight * self.competence_scale  # (B, 1)
         
         # Normalize to [0, 1] range
         R_competence = torch.tanh(R_competence)

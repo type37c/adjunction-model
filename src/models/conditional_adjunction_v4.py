@@ -176,6 +176,10 @@ class ConditionalAdjunctionModelV4(nn.Module):
             pos, reconstructed, batch
         )
         
+        # Add valence_mean to agent_info for logging
+        if 'valence' in agent_info:
+            agent_info['valence_mean'] = agent_info['valence'].mean(dim=-1)
+        
         return {
             'affordances': affordances,
             'reconstructed': reconstructed,
