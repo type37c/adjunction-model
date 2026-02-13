@@ -24,7 +24,7 @@ Choosing uncertain breakdowns forces GNN growth, which maintains adaptability.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 
 class PriorityComputation(nn.Module):
@@ -96,17 +96,20 @@ class PriorityComputation(nn.Module):
         self,
         coherence_spatial: torch.Tensor,
         uncertainty: torch.Tensor,
-        batch: torch.Tensor
+        batch: torch.Tensor,
+        valence: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute priority scores for each point.
         
-        priority_i = coherence_i × uncertainty_i
+        v2: priority_i = coherence_i × uncertainty_i
+        v3: priority_i = coherence_i × uncertainty_i × valence_i
         
         Args:
             coherence_spatial: (N,) per-point coherence signal
             uncertainty: (B,) per-sample uncertainty
             batch: (N,) batch assignment for coherence_spatial
+            valence: (B, valence_dim) or (B,) valence scores, optional (v3 only)
         
         Returns:
             priority: (N,) priority score per point
@@ -116,8 +119,25 @@ class PriorityComputation(nn.Module):
         # uncertainty: (B,) -> (N,)
         uncertainty_expanded = uncertainty[batch]  # (N,)
         
-        # Compute priority
+        # Compute base priority (v2)
         priority = coherence_spatial * uncertainty_expanded  # (N,)
+        
+        # If valence is provided, incorporate it (v3)
+        if valence is not None:
+            # If valence is multi-dimensional, aggregate to scalar per sample
+            if valence.dim() > 1:
+                valence_scalar = valence.mean(dim=-1)  # (B,)
+            else:
+                valence_scalar = valence  # (B,)
+            
+            # Expand to per-point
+            valence_expanded = valence_scalar[batch]  # (N,)
+            
+            # Clip valence to avoid negative priorities
+            valence_expanded = torch.clamp(valence_expanded, min=1e-5)
+            
+            # Multiply by valence
+            priority = priority * valence_expanded  # (N,)
         
         # Normalize priority within each batch using softmax
         # This ensures priorities sum to 1 per sample
@@ -138,7 +158,8 @@ class PriorityComputation(nn.Module):
         self,
         coherence_spatial: torch.Tensor,
         agent_state_info: Dict[str, torch.Tensor],
-        batch: torch.Tensor
+        batch: torch.Tensor,
+        valence: Optional[torch.Tensor] = None
     ) -> Dict[str, torch.Tensor]:
         """
         Complete forward pass for priority computation.
@@ -151,6 +172,7 @@ class PriorityComputation(nn.Module):
                 - 'prior_mean': (B, latent_dim)
                 - 'prior_std': (B, latent_dim)
             batch: (N,) batch assignment
+            valence: (B, valence_dim) or (B,) valence scores, optional (v3 only)
         
         Returns:
             results: Dictionary with:
@@ -172,9 +194,9 @@ class PriorityComputation(nn.Module):
                 agent_state_info['prior_std']
             )
         
-        # Compute priority
+        # Compute priority (with optional valence)
         priority, priority_normalized = self.compute_priority(
-            coherence_spatial, uncertainty, batch
+            coherence_spatial, uncertainty, batch, valence
         )
         
         return {
