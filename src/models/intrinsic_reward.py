@@ -4,21 +4,24 @@ Intrinsic Reward Module for Purpose Space P
 This module computes intrinsic rewards based on Active Inference principles,
 adapted for the "suspension structure" philosophy:
 
-1. Curiosity (R_curiosity): Reduction in uncertainty
-   - "I learned something I didn't know"
-   - Encourages exploration of uncertain states
+1. Curiosity (R_curiosity): Graph activation (engagement with structure)
+   - "I am using the graph structure to understand"
+   - Measures attention_weight: how actively the agent engages with F layer
+   - This corresponds to "confidence" as graph activation indicator
 
-2. Competence (R_competence): Improvement in coherence after attention
-   - "I faced a breakdown and understood it better"
+2. Competence (R_competence): Attending to breakdowns
+   - "I face difficulty and engage with it"
    - Encourages engaging with breakdowns rather than avoiding them
 
 3. Novelty (R_novelty): Unexpected discoveries (KL divergence)
    - "Something unexpected happened"
    - Encourages discovering new patterns (but not too much)
 
-Key difference from standard Active Inference:
-- Standard: Minimize surprise (prediction error)
-- This project: Maximize creative potential (breakdown × uncertainty × valence)
+Key insights from development:
+- Curiosity is NOT "uncertainty reduction" (requires F/G learning)
+- Curiosity IS "graph activation" (using structure to understand)
+- Confidence emerges from graph activation patterns
+- Competence is "attending to breakdowns" (not reducing them, when F/G frozen)
 
 The intrinsic reward is used to update valence, giving Agent C a "purpose":
 - valence(t+1) = (1-decay) × valence(t) + decay × R_intrinsic
@@ -34,16 +37,17 @@ class IntrinsicRewardComputation(nn.Module):
     Compute intrinsic rewards for valence update.
     
     This module combines three types of intrinsic motivation:
-    1. Curiosity: uncertainty reduction
-    2. Competence: coherence improvement (when attended)
-    3. Novelty: unexpected discoveries
+    1. Curiosity: understanding progress within episode (uncertainty reduction from episode start)
+    2. Competence: attending to breakdowns (engaging with difficulty)
+    3. Novelty: unexpected discoveries (KL divergence)
     """
     
+
     def __init__(
         self,
-        alpha_curiosity: float = 0.0,  # Disabled due to sign issue
-        beta_competence: float = 0.6,
-        gamma_novelty: float = 0.4,
+        alpha_curiosity: float = 0.2,  # Re-enabled with new design
+        beta_competence: float = 0.5,
+        gamma_novelty: float = 0.3,
         novelty_scale: float = 0.1,
         competence_scale: float = 100.0  # Scale up competence reward
     ):
@@ -61,6 +65,8 @@ class IntrinsicRewardComputation(nn.Module):
         self.gamma = gamma_novelty
         self.novelty_scale = novelty_scale
         self.competence_scale = competence_scale
+        
+
     
     def forward(
         self,
@@ -85,12 +91,11 @@ class IntrinsicRewardComputation(nn.Module):
         Returns:
             rewards: Dictionary with individual and total intrinsic rewards
         """
-        # (1) Curiosity reward: reduction in uncertainty
-        # Positive when uncertainty decreases (we learned something)
-        R_curiosity = uncertainty_prev - uncertainty_curr  # (B,)
-        
-        # Normalize to [0, 1] range (approximately)
-        R_curiosity = torch.tanh(R_curiosity / 10.0)  # Scale down large values
+        # (1) Curiosity reward: graph activation (engagement with structure)
+        # Measures how much the agent engages with the affordance graph structure
+        # This corresponds to "confidence" as graph activation indicator
+        # High attention_weight = agent is actively using the graph to understand
+        R_curiosity = attention_weight.squeeze(-1)  # (B,)
         
         # (2) Competence reward: attending to breakdowns (v2 - redesigned)
         # Positive when we attend to large breakdowns (engage with difficulty)

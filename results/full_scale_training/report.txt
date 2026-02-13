@@ -5,17 +5,17 @@ FULL-SCALE TRAINING EXPERIMENT REPORT
 Summary Statistics:
 ------------------------------------------------------------
   Total Episodes: 100.0000
-  Final Intrinsic Reward: 0.4213
-  Final Value (Start): 6.6390
-  Final TD Loss: 3.9768
-  Final Coherence: 0.4373
-  Final Valence: 0.6669
+  Final Intrinsic Reward: 0.2543
+  Final Value (Start): 2.3796
+  Final TD Loss: 0.1764
+  Final Coherence: 0.4379
+  Final Valence: 0.6536
 
 Trends:
 ------------------------------------------------------------
-  r_intrinsic: 0.0628 → 0.4090 (Δ +0.3461)
-  value_start: 0.5633 → 7.0467 (Δ +6.4834)
-  avg_coherence: 0.4328 → 0.4323 (Δ -0.0006)
-  avg_valence: 0.5812 → 0.6606 (Δ +0.0794)
+  r_intrinsic: 0.0710 → 0.2240 (Δ +0.1529)
+  value_start: 0.6872 → 2.0594 (Δ +1.3721)
+  avg_coherence: 0.4329 → 0.4332 (Δ +0.0003)
+  avg_valence: 0.5814 → 0.6485 (Δ +0.0671)
 
 ============================================================
