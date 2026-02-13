@@ -1,3 +1,2 @@
-from .train_phase1 import Phase1Trainer
-
-__all__ = ['Phase1Trainer']
+# Phase1Trainer removed - use Phase2SlackTrainer instead
+__all__ = []

@@ -35,7 +35,7 @@ from typing import Dict, Optional
 import sys
 sys.path.append('/home/ubuntu/adjunction-model')
 
-from src.models.conditional_adjunction_v4 import ConditionalAdjunctionModelV4
+from src.models.adjunction_model import AdjunctionModel
 from src.data.synthetic_dataset import SyntheticAffordanceDataset
 
 
@@ -46,7 +46,7 @@ class Phase2SlackTrainer:
     
     def __init__(
         self,
-        model: ConditionalAdjunctionModelV4,
+        model: AdjunctionModel,
         device: torch.device = torch.device('cpu'),
         lr: float = 1e-4,
         lambda_aff: float = 1.0,

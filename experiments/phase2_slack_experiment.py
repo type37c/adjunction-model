@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-from src.models.conditional_adjunction_v4 import ConditionalAdjunctionModelV4
+from src.models.adjunction_model import AdjunctionModel
 from src.data.synthetic_dataset import SyntheticAffordanceDataset
 from src.training.train_phase2_slack import Phase2SlackTrainer
 
@@ -126,7 +126,7 @@ def run_phase2_slack_experiment(
     print("Training F⊣G from scratch (without reconstruction loss)")
     print("This preserves η and ε as 'slack' rather than minimizing them.\n")
     
-    model = ConditionalAdjunctionModelV4(
+    model = AdjunctionModel(
         num_affordances=5,
         num_points=512,
         f_hidden_dim=64,

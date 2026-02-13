@@ -21,7 +21,7 @@ import sys
 sys.path.append('/home/ubuntu/adjunction-model')
 
 from src.data.synthetic_dataset import SyntheticAffordanceDataset
-from src.models.conditional_adjunction_v4 import ConditionalAdjunctionModelV4
+from src.models.adjunction_model import AdjunctionModel
 from src.models.value_function import ValueFunction
 from src.training.train_agent_value_based import ValueBasedAgentTrainer
 
@@ -255,7 +255,7 @@ def run_full_scale_experiment(
     
     # Create model
     print("Creating model...")
-    model = ConditionalAdjunctionModelV4(
+    model = AdjunctionModel(
         num_affordances=5,
         num_points=512,
         f_hidden_dim=64,

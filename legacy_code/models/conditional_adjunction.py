@@ -19,7 +19,7 @@ sys.path.append('/home/ubuntu/adjunction-model')
 
 from src.models.functor_f import FunctorF
 from src.models.functor_g import FunctorG
-# AgentLayerC import removed - only FiLM wrappers are needed
+from src.models.agent_layer import AgentLayerC
 
 
 class ConditionalFunctorF(nn.Module):
@@ -153,9 +153,7 @@ class ConditionalFunctorG(nn.Module):
         return reconstructed
 
 
-# ConditionalAdjunctionModel class removed - use AdjunctionModel instead
-
-class _LegacyConditionalAdjunctionModel(nn.Module):
+class ConditionalAdjunctionModel(nn.Module):
     """
     Full Conditional Adjunction Model: F_C ⊣ G_C with Agent Layer C.
     
