@@ -49,6 +49,7 @@ adjunction-model/
 | :--- | :--- |
 | [Research Note (日本語)](docs/research_note_ja.md) | 理論の全体像を整合的にまとめた研究ノート |
 | [Research Note (English)](docs/research_note_en.md) | Full research note in English |
+| [Suspension and Confidence (保留構造と確信度)](docs/suspension_and_confidence.md) | 保留構造の本質と確信度の次元に関する議論 |
 
 
 ---
