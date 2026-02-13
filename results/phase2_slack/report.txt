@@ -1,0 +1,33 @@
+Phase 2 Slack Preservation Experiment Report
+================================================================================
+
+## Training Configuration
+
+- Number of epochs: 2
+- Final loss: 0.6467
+- Final affordance loss: 0.5484
+
+## Slack Analysis
+
+### Unit η (Shape Slack)
+
+- Initial value: 0.4409
+- Final value: 0.4493
+- Change: 0.0084 (1.9%)
+- Mean: 0.4451
+- Std: 0.0042
+- Min: 0.4409
+- Max: 0.4493
+
+### Interpretation
+
+✅ SUCCESS: η is well preserved (>90% of initial value).
+
+## Next Steps
+
+1. Examine visualizations in slack_signals.png
+2. Compare with standard Phase 2 training (with L_recon)
+3. Analyze correlation between η and ε
+4. Observe Agent C's behavior with preserved slack
+
+================================================================================

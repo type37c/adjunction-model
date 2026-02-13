@@ -146,10 +146,16 @@ class ConditionalAdjunctionModelV4(nn.Module):
         # Agent C v3 receives spatial coherence + valence-aware priority
         dummy_action = torch.zeros(batch_size, self.num_affordances, device=device)
         
+        # Ensure coherence_signal_prev is 2D: (B,) -> (B, 1)
+        if coherence_signal_prev.dim() == 1:
+            coherence_signal_scalar = coherence_signal_prev.unsqueeze(-1)
+        else:
+            coherence_signal_scalar = coherence_signal_prev
+        
         agent_state_new, context, agent_info = self.agent_c(
             prev_state=agent_state,
             action=dummy_action,
-            coherence_signal_scalar=coherence_signal_prev,
+            coherence_signal_scalar=coherence_signal_scalar,
             coherence_signal_spatial=coherence_spatial_prev,
             batch=batch,
             obs=None  # Observations will be provided in the training loop
@@ -172,9 +178,26 @@ class ConditionalAdjunctionModelV4(nn.Module):
         reconstructed = self.G(affordances_batched, self.num_points, context)
         
         # Step 4: Compute coherence signals (both scalar and spatial)
+        # Unit η: ||Shape - G(F(Shape))||
         coherence_signal, coherence_spatial = self._compute_coherence_signal(
             pos, reconstructed, batch
         )
+        
+        # Step 5: Compute counit signal (ε)
+        # Counit ε: ||Affordance - F(G(Affordance))||
+        # Re-encode the reconstructed shape to get affordances
+        # reconstructed is (B, num_points, 3), need to convert to (N, 3) for F
+        B_recon, N_recon, _ = reconstructed.shape
+        reconstructed_flat = reconstructed.reshape(B_recon * N_recon, 3)  # (B*N, 3)
+        # Create batch indices for reconstructed points
+        batch_recon = torch.arange(B_recon, device=device).repeat_interleave(N_recon)  # (B*N,)
+        affordances_reencoded = self.F(reconstructed_flat, batch_recon, context)  # (B*N, num_affordances)
+        # Average over points to get (B, num_affordances)
+        # Reshape to (B, N, num_affordances) then average over N
+        affordances_reencoded_batched = affordances_reencoded.reshape(B_recon, N_recon, self.num_affordances)
+        affordances_reencoded_mean = affordances_reencoded_batched.mean(dim=1)  # (B, num_affordances)
+        # Compute distance between original and re-encoded affordances
+        counit_signal = (affordances_batched - affordances_reencoded_mean).pow(2).sum(dim=-1, keepdim=True).sqrt()  # (B, 1)
         
         # Add valence_mean to agent_info for logging
         if 'valence' in agent_info:
@@ -183,8 +206,9 @@ class ConditionalAdjunctionModelV4(nn.Module):
         return {
             'affordances': affordances,
             'reconstructed': reconstructed,
-            'coherence_signal': coherence_signal,         # (B, 1) scalar
+            'coherence_signal': coherence_signal,         # (B, 1) scalar - Unit η
             'coherence_spatial': coherence_spatial,       # (N,) per-point
+            'counit_signal': counit_signal,               # (B, 1) scalar - Counit ε
             'agent_state': agent_state_new,
             'context': context,
             'rssm_info': agent_info,

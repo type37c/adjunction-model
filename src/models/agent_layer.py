@@ -114,6 +114,9 @@ class RSSM(nn.Module):
         z_prev = prev_state['z']
         
         # Update deterministic state h
+        # Ensure coherence_signal is 2D: (B,) -> (B, 1)
+        if coherence_signal.dim() == 1:
+            coherence_signal = coherence_signal.unsqueeze(-1)
         gru_input = torch.cat([z_prev, action, coherence_signal], dim=-1)
         h = self.gru(gru_input, h_prev)
         
@@ -124,7 +127,13 @@ class RSSM(nn.Module):
         
         # If observation is available, compute posterior p(z | h, obs)
         if obs is not None:
+            # Debug: print shapes
+            # print(f"[RSSM Debug] obs shape: {obs.shape}, h shape: {h.shape}")
             obs_encoded = self.obs_encoder(obs)
+            # print(f"[RSSM Debug] obs_encoded shape: {obs_encoded.shape}")
+            # Ensure obs_encoded has same batch dimension as h
+            if obs_encoded.shape[0] != h.shape[0]:
+                raise RuntimeError(f"Batch size mismatch: h={h.shape[0]}, obs_encoded={obs_encoded.shape[0]}")
             posterior_params = self.posterior_net(torch.cat([h, obs_encoded], dim=-1))
             posterior_mean, posterior_log_std = torch.chunk(posterior_params, 2, dim=-1)
             posterior_std = F.softplus(posterior_log_std) + 1e-5

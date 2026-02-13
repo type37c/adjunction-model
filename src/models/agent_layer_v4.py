@@ -23,6 +23,7 @@ from typing import Tuple, Optional, Dict
 from .agent_layer import RSSM
 from .priority import PriorityComputation
 from .valence_v2 import ValenceMemoryV2
+from .intrinsic_reward import IntrinsicRewardComputation
 
 
 class AgentLayerC_v4(nn.Module):
@@ -84,7 +85,6 @@ class AgentLayerC_v4(nn.Module):
         self.valence_memory = ValenceMemoryV2(
             valence_dim=valence_dim,
             decay_rate=valence_decay,
-            init_valence=1.0,
             alpha_curiosity=alpha_curiosity,
             beta_competence=beta_competence,
             gamma_novelty=gamma_novelty
@@ -121,7 +121,7 @@ class AgentLayerC_v4(nn.Module):
                 - 'uncertainty': (B,) previous uncertainty (for intrinsic reward)
         """
         rssm_state = self.rssm.initial_state(batch_size, device)
-        valence = self.valence_memory.initial_valence(batch_size, device)
+        valence = self.valence_memory.get_initial_valence(batch_size, device)
         coherence_prev = torch.zeros(batch_size, 1, device=device)
         uncertainty = torch.zeros(batch_size, device=device)
         
@@ -216,6 +216,25 @@ class AgentLayerC_v4(nn.Module):
             posterior_dist, prior_dist
         ).sum(dim=-1)  # (B,)
         
+        # Get previous confidence (if available)
+        # Confidence is computed from priority_normalized distribution
+        if 'confidence' in prev_state:
+            confidence_prev = prev_state['confidence']  # (B,)
+        else:
+            confidence_prev = None
+        
+        # Compute current confidence from previous priority distribution
+        # Note: We use prev_state's priority_normalized to compute "current" confidence
+        # because the truly current priority hasn't been computed yet (circular dependency)
+        # This means confidence_curr here is actually based on the PREVIOUS step's priority
+        # which is fine: it represents "how focused was our attention last step"
+        if 'priority_normalized' in prev_state:
+            confidence_curr = IntrinsicRewardComputation.compute_confidence(
+                prev_state['priority_normalized'], batch
+            )
+        else:
+            confidence_curr = None
+        
         # Update valence using intrinsic rewards
         valence_results = self.valence_memory(
             valence_prev,
@@ -224,7 +243,9 @@ class AgentLayerC_v4(nn.Module):
             coherence_prev,
             coherence_signal_scalar,
             attention_weight,
-            kl_divergence
+            kl_divergence,
+            confidence_prev,
+            confidence_curr
         )
         
         valence_new = valence_results['valence']  # (B, valence_dim)
@@ -267,13 +288,19 @@ class AgentLayerC_v4(nn.Module):
         context_input = torch.cat([h, z, obs_attended, valence_new], dim=-1)
         context = self.context_net(context_input)  # (B, context_dim)
         
+        # Compute confidence for this step (to store for next step)
+        confidence = IntrinsicRewardComputation.compute_confidence(
+            priority_normalized, batch
+        )
+        
         # 6. Assemble new state
         new_state = {
             **new_state_rssm,
             'valence': valence_new,
             'coherence_prev': coherence_signal_scalar,
             'uncertainty': uncertainty,  # v4: store uncertainty for next step
-            'priority_normalized': priority_normalized  # Store for next step
+            'priority_normalized': priority_normalized,  # Store for next step
+            'confidence': confidence  # v5: store confidence for next step
         }
         
         # 7. Assemble info
@@ -283,6 +310,7 @@ class AgentLayerC_v4(nn.Module):
             'priority_normalized': priority_normalized,
             'uncertainty': uncertainty,
             'valence': valence_new,
+            'confidence': confidence,  # v5: confidence as meta-indicator
             'R_intrinsic': R_intrinsic,  # v4: intrinsic reward
             'R_curiosity': valence_results.get('R_curiosity', None),
             'R_competence': valence_results.get('R_competence', None),
