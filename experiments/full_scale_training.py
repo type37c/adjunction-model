@@ -265,9 +265,9 @@ def run_full_scale_experiment(
         context_dim=128,
         valence_dim=32,
         valence_decay=0.1,
-        alpha_curiosity=0.2,  # Re-enabled: understanding progress within episode
+        alpha_curiosity=0.3,  # v5: confidence change (entropy reduction)
         beta_competence=0.5,  # Attending to breakdowns
-        gamma_novelty=0.3     # Unexpected discoveries
+        gamma_novelty=0.2     # Unexpected discoveries
     ).to(device)
     
     value_function = ValueFunction(

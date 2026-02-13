@@ -1,0 +1,14 @@
+{
+  "eta_epsilon_correlation": null,
+  "slack_dynamics": null,
+  "agent_behavior": {
+    "final_affordance_loss": 0.04360103060025722,
+    "affordance_improvement": 0.5122982690809295,
+    "final_coherence": 0.6691605821251869,
+    "coherence_stability": 0.034335868979237,
+    "oscillation_detected": false,
+    "num_coherence_peaks": 3,
+    "plateau_epochs": 3,
+    "suspension_structure_indicator": false
+  }
+}

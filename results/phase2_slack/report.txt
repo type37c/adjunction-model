@@ -3,21 +3,21 @@ Phase 2 Slack Preservation Experiment Report
 
 ## Training Configuration
 
-- Number of epochs: 2
-- Final loss: 0.6467
-- Final affordance loss: 0.5484
+- Number of epochs: 20
+- Final loss: 0.1105
+- Final affordance loss: 0.0436
 
 ## Slack Analysis
 
 ### Unit η (Shape Slack)
 
-- Initial value: 0.4409
-- Final value: 0.4493
-- Change: 0.0084 (1.9%)
-- Mean: 0.4451
-- Std: 0.0042
-- Min: 0.4409
-- Max: 0.4493
+- Initial value: 0.4491
+- Final value: 0.5130
+- Change: 0.0639 (14.2%)
+- Mean: 0.5005
+- Std: 0.0165
+- Min: 0.4491
+- Max: 0.5132
 
 ### Interpretation
 

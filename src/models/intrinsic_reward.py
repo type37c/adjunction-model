@@ -4,10 +4,11 @@ Intrinsic Reward Module for Purpose Space P
 This module computes intrinsic rewards based on Active Inference principles,
 adapted for the "suspension structure" philosophy:
 
-1. Curiosity (R_curiosity): Graph activation (engagement with structure)
-   - "I am using the graph structure to understand"
-   - Measures attention_weight: how actively the agent engages with F layer
-   - This corresponds to "confidence" as graph activation indicator
+1. Curiosity (R_curiosity): Confidence change (narrowing down choices)
+   - "Choices are narrowing — I am becoming more certain"
+   - Confidence = 1 - normalized_entropy(priority_distribution)
+   - Curiosity = confidence(t) - confidence(t-1)
+   - This is a META-INDICATOR of P, not an axis of P
 
 2. Competence (R_competence): Attending to breakdowns
    - "I face difficulty and engage with it"
@@ -18,13 +19,15 @@ adapted for the "suspension structure" philosophy:
    - Encourages discovering new patterns (but not too much)
 
 Key insights from development:
-- Curiosity is NOT "uncertainty reduction" (requires F/G learning)
-- Curiosity IS "graph activation" (using structure to understand)
-- Confidence emerges from graph activation patterns
-- Competence is "attending to breakdowns" (not reducing them, when F/G frozen)
+- Confidence = "other choices decrease" (entropy reduction of priority distribution)
+- Confidence is an OUTPUT indicator of P, not an INPUT axis
+- P has 3 axes: Coherence, Uncertainty, Valence (inputs to Priority)
+- Confidence emerges FROM Priority distribution (output)
+- Curiosity = change in confidence (delta of meta-indicator)
+- Competence = "attending to breakdowns" (not reducing them, when F/G frozen)
 
 The intrinsic reward is used to update valence, giving Agent C a "purpose":
-- valence(t+1) = (1-decay) × valence(t) + decay × R_intrinsic
+- valence(t+1) = (1-decay) * valence(t) + decay * R_intrinsic
 """
 
 import torch
@@ -37,19 +40,25 @@ class IntrinsicRewardComputation(nn.Module):
     Compute intrinsic rewards for valence update.
     
     This module combines three types of intrinsic motivation:
-    1. Curiosity: understanding progress within episode (uncertainty reduction from episode start)
+    1. Curiosity: confidence change (entropy reduction of priority distribution)
     2. Competence: attending to breakdowns (engaging with difficulty)
     3. Novelty: unexpected discoveries (KL divergence)
+    
+    Confidence is computed as:
+        confidence = 1 - entropy(priority_normalized) / log(num_points)
+    
+    Curiosity reward is:
+        R_curiosity = confidence(t) - confidence(t-1)
+        (positive when choices narrow down)
     """
     
-
     def __init__(
         self,
-        alpha_curiosity: float = 0.2,  # Re-enabled with new design
+        alpha_curiosity: float = 0.3,
         beta_competence: float = 0.5,
-        gamma_novelty: float = 0.3,
+        gamma_novelty: float = 0.2,
         novelty_scale: float = 0.1,
-        competence_scale: float = 100.0  # Scale up competence reward
+        competence_scale: float = 100.0
     ):
         """
         Args:
@@ -57,6 +66,7 @@ class IntrinsicRewardComputation(nn.Module):
             beta_competence: Weight for competence reward
             gamma_novelty: Weight for novelty reward
             novelty_scale: Scale factor for novelty (to keep it in reasonable range)
+            competence_scale: Scale factor for competence (to amplify small coherence values)
         """
         super().__init__()
         
@@ -65,8 +75,41 @@ class IntrinsicRewardComputation(nn.Module):
         self.gamma = gamma_novelty
         self.novelty_scale = novelty_scale
         self.competence_scale = competence_scale
+    
+    @staticmethod
+    def compute_confidence(priority_normalized: torch.Tensor, batch: torch.Tensor) -> torch.Tensor:
+        """
+        Compute confidence as 1 - normalized entropy of priority distribution.
         
-
+        Confidence = 1 means all attention on one point (maximum certainty).
+        Confidence = 0 means uniform attention (maximum uncertainty).
+        
+        Args:
+            priority_normalized: Normalized priority scores (N,), sums to 1 per batch
+            batch: Batch assignment (N,)
+        
+        Returns:
+            confidence: Per-batch confidence (B,)
+        """
+        batch_size = int(batch.max().item()) + 1
+        confidence = torch.zeros(batch_size, device=batch.device)
+        
+        for b in range(batch_size):
+            mask = (batch == b)
+            n_points = mask.sum()
+            if n_points > 1:
+                p = priority_normalized[mask]
+                # Entropy of the distribution
+                entropy = -(p * torch.log(p + 1e-8)).sum()
+                # Maximum entropy for uniform distribution
+                max_entropy = torch.log(torch.tensor(float(n_points), device=batch.device))
+                # Confidence = 1 - normalized entropy
+                confidence[b] = 1.0 - (entropy / (max_entropy + 1e-8))
+            else:
+                # Single point: maximum confidence
+                confidence[b] = 1.0
+        
+        return confidence
     
     def forward(
         self,
@@ -75,7 +118,9 @@ class IntrinsicRewardComputation(nn.Module):
         coherence_prev: torch.Tensor,
         coherence_curr: torch.Tensor,
         attention_weight: torch.Tensor,
-        kl_divergence: torch.Tensor
+        kl_divergence: torch.Tensor,
+        confidence_prev: Optional[torch.Tensor] = None,
+        confidence_curr: Optional[torch.Tensor] = None
     ) -> Dict[str, torch.Tensor]:
         """
         Compute intrinsic rewards.
@@ -85,17 +130,28 @@ class IntrinsicRewardComputation(nn.Module):
             uncertainty_curr: Current uncertainty (B,)
             coherence_prev: Previous coherence (B, 1)
             coherence_curr: Current coherence (B, 1)
-            attention_weight: Attention weight (B, 1) - how much we attended to this
+            attention_weight: Attention weight (B, 1)
             kl_divergence: KL(posterior || prior) (B,)
+            confidence_prev: Previous confidence (B,) - from prev step's priority distribution
+            confidence_curr: Current confidence (B,) - from current step's priority distribution
         
         Returns:
             rewards: Dictionary with individual and total intrinsic rewards
         """
-        # (1) Curiosity reward: graph activation (engagement with structure)
-        # Measures how much the agent engages with the affordance graph structure
-        # This corresponds to "confidence" as graph activation indicator
-        # High attention_weight = agent is actively using the graph to understand
-        R_curiosity = attention_weight.squeeze(-1)  # (B,)
+        batch_size = uncertainty_curr.size(0)
+        device = uncertainty_curr.device
+        
+        # (1) Curiosity reward: confidence change (narrowing down choices)
+        # Confidence = 1 - normalized_entropy(priority_distribution)
+        # Curiosity = confidence(t) - confidence(t-1)
+        # Positive when choices narrow down (becoming more certain)
+        
+        if confidence_prev is not None and confidence_curr is not None:
+            # Curiosity = increase in confidence
+            R_curiosity = torch.clamp(confidence_curr - confidence_prev, min=0.0)
+        else:
+            # Fallback: no confidence data available yet (first step)
+            R_curiosity = torch.zeros(batch_size, device=device)
         
         # (2) Competence reward: attending to breakdowns (v2 - redesigned)
         # Positive when we attend to large breakdowns (engage with difficulty)
@@ -124,14 +180,16 @@ class IntrinsicRewardComputation(nn.Module):
             'R_curiosity': R_curiosity,
             'R_competence': R_competence.squeeze(-1),
             'R_novelty': R_novelty,
-            'R_intrinsic': R_intrinsic.squeeze(-1)
+            'R_intrinsic': R_intrinsic.squeeze(-1),
+            'confidence_curr': confidence_curr if confidence_curr is not None else torch.zeros(batch_size, device=device)
         }
 
 
 if __name__ == '__main__':
-    print("Testing Intrinsic Reward Computation...")
+    print("Testing Intrinsic Reward Computation (v5: Confidence-based Curiosity)...")
     
-    batch_size = 4
+    batch_size = 2
+    num_points = 10
     
     # Create module
     intrinsic_reward = IntrinsicRewardComputation(
@@ -141,75 +199,88 @@ if __name__ == '__main__':
     )
     
     print(f"\nIntrinsic Reward module created")
-    print(f"  α (curiosity): {intrinsic_reward.alpha}")
-    print(f"  β (competence): {intrinsic_reward.beta}")
-    print(f"  γ (novelty): {intrinsic_reward.gamma}")
+    print(f"  alpha (curiosity): {intrinsic_reward.alpha}")
+    print(f"  beta (competence): {intrinsic_reward.beta}")
+    print(f"  gamma (novelty): {intrinsic_reward.gamma}")
     
-    # Simulate different scenarios
-    scenarios = [
-        {
-            'name': 'Learning (uncertainty reduced)',
-            'uncertainty_prev': torch.tensor([50.0, 50.0, 50.0, 50.0]),
-            'uncertainty_curr': torch.tensor([30.0, 30.0, 30.0, 30.0]),
-            'coherence_prev': torch.ones(4, 1) * 0.5,
-            'coherence_curr': torch.ones(4, 1) * 0.5,
-            'attention_weight': torch.ones(4, 1) * 0.5,
-            'kl_divergence': torch.ones(4) * 0.1
-        },
-        {
-            'name': 'Competence (breakdown resolved)',
-            'uncertainty_prev': torch.tensor([50.0, 50.0, 50.0, 50.0]),
-            'uncertainty_curr': torch.tensor([50.0, 50.0, 50.0, 50.0]),
-            'coherence_prev': torch.ones(4, 1) * 0.8,
-            'coherence_curr': torch.ones(4, 1) * 0.3,
-            'attention_weight': torch.ones(4, 1) * 0.9,
-            'kl_divergence': torch.ones(4) * 0.1
-        },
-        {
-            'name': 'Novelty (unexpected discovery)',
-            'uncertainty_prev': torch.tensor([50.0, 50.0, 50.0, 50.0]),
-            'uncertainty_curr': torch.tensor([50.0, 50.0, 50.0, 50.0]),
-            'coherence_prev': torch.ones(4, 1) * 0.5,
-            'coherence_curr': torch.ones(4, 1) * 0.5,
-            'attention_weight': torch.ones(4, 1) * 0.5,
-            'kl_divergence': torch.ones(4) * 5.0
-        },
-        {
-            'name': 'Mixed (all three)',
-            'uncertainty_prev': torch.tensor([60.0, 60.0, 60.0, 60.0]),
-            'uncertainty_curr': torch.tensor([40.0, 40.0, 40.0, 40.0]),
-            'coherence_prev': torch.ones(4, 1) * 0.7,
-            'coherence_curr': torch.ones(4, 1) * 0.4,
-            'attention_weight': torch.ones(4, 1) * 0.8,
-            'kl_divergence': torch.ones(4) * 2.0
-        }
-    ]
+    # Test confidence computation
+    print(f"\n{'='*60}")
+    print("Testing confidence computation")
+    print(f"{'='*60}")
     
-    for scenario in scenarios:
-        print(f"\n{'='*60}")
-        print(f"Scenario: {scenario['name']}")
-        print(f"{'='*60}")
-        
-        rewards = intrinsic_reward(
-            scenario['uncertainty_prev'],
-            scenario['uncertainty_curr'],
-            scenario['coherence_prev'],
-            scenario['coherence_curr'],
-            scenario['attention_weight'],
-            scenario['kl_divergence']
-        )
-        
-        print(f"  R_curiosity: {rewards['R_curiosity'].mean().item():.4f}")
-        print(f"  R_competence: {rewards['R_competence'].mean().item():.4f}")
-        print(f"  R_novelty: {rewards['R_novelty'].mean().item():.4f}")
-        print(f"  R_intrinsic (total): {rewards['R_intrinsic'].mean().item():.4f}")
+    batch = torch.tensor([0]*num_points + [1]*num_points)
     
-    print("\n" + "="*60)
+    # Uniform distribution (low confidence)
+    p_uniform = torch.ones(num_points * 2) / num_points
+    conf_uniform = IntrinsicRewardComputation.compute_confidence(p_uniform, batch)
+    print(f"  Uniform distribution: confidence = {conf_uniform}")
+    
+    # Concentrated distribution (high confidence)
+    p_concentrated = torch.zeros(num_points * 2)
+    p_concentrated[0] = 0.9
+    p_concentrated[1:num_points] = 0.1 / (num_points - 1)
+    p_concentrated[num_points] = 0.9
+    p_concentrated[num_points+1:] = 0.1 / (num_points - 1)
+    conf_concentrated = IntrinsicRewardComputation.compute_confidence(p_concentrated, batch)
+    print(f"  Concentrated distribution: confidence = {conf_concentrated}")
+    
+    # Delta-like distribution (maximum confidence)
+    p_delta = torch.zeros(num_points * 2)
+    p_delta[0] = 1.0
+    p_delta[num_points] = 1.0
+    conf_delta = IntrinsicRewardComputation.compute_confidence(p_delta, batch)
+    print(f"  Delta distribution: confidence = {conf_delta}")
+    
+    # Test curiosity reward (confidence change)
+    print(f"\n{'='*60}")
+    print("Testing curiosity reward (confidence change)")
+    print(f"{'='*60}")
+    
+    rewards = intrinsic_reward(
+        uncertainty_prev=torch.tensor([50.0, 50.0]),
+        uncertainty_curr=torch.tensor([50.0, 50.0]),
+        coherence_prev=torch.ones(2, 1) * 0.5,
+        coherence_curr=torch.ones(2, 1) * 0.5,
+        attention_weight=torch.ones(2, 1) * 0.5,
+        kl_divergence=torch.ones(2) * 0.1,
+        confidence_prev=conf_uniform,
+        confidence_curr=conf_concentrated
+    )
+    
+    print(f"  Confidence: {conf_uniform[0]:.4f} -> {conf_concentrated[0]:.4f}")
+    print(f"  R_curiosity: {rewards['R_curiosity'].mean().item():.4f}")
+    print(f"  R_competence: {rewards['R_competence'].mean().item():.4f}")
+    print(f"  R_novelty: {rewards['R_novelty'].mean().item():.4f}")
+    print(f"  R_intrinsic: {rewards['R_intrinsic'].mean().item():.4f}")
+    
+    # Test no confidence change
+    print(f"\n{'='*60}")
+    print("Testing no confidence change")
+    print(f"{'='*60}")
+    
+    rewards2 = intrinsic_reward(
+        uncertainty_prev=torch.tensor([50.0, 50.0]),
+        uncertainty_curr=torch.tensor([50.0, 50.0]),
+        coherence_prev=torch.ones(2, 1) * 0.5,
+        coherence_curr=torch.ones(2, 1) * 0.5,
+        attention_weight=torch.ones(2, 1) * 0.5,
+        kl_divergence=torch.ones(2) * 0.1,
+        confidence_prev=conf_concentrated,
+        confidence_curr=conf_concentrated
+    )
+    
+    print(f"  Confidence: {conf_concentrated[0]:.4f} -> {conf_concentrated[0]:.4f}")
+    print(f"  R_curiosity: {rewards2['R_curiosity'].mean().item():.4f}")
+    print(f"  R_intrinsic: {rewards2['R_intrinsic'].mean().item():.4f}")
+    
+    print(f"\n{'='*60}")
     print("THEORETICAL VERIFICATION:")
     print("="*60)
-    print("Intrinsic rewards give Agent C a 'purpose':")
-    print("1. Curiosity: Seek to reduce uncertainty")
-    print("2. Competence: Engage with breakdowns and resolve them")
-    print("3. Novelty: Discover new patterns")
-    print("This prevents 'coherence minimization collapse'")
+    print("Confidence = 1 - normalized_entropy(priority_distribution)")
+    print("  High confidence = choices narrowed down")
+    print("  Low confidence = choices spread out")
+    print("Curiosity = confidence(t) - confidence(t-1)")
+    print("  Positive when becoming more certain")
+    print("  Zero when confidence unchanged or decreasing")
+    print("Confidence is an OUTPUT indicator of P, not an INPUT axis")
     print("="*60)
