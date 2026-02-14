@@ -51,40 +51,26 @@
   - [ ] Run 50-epoch experiment
   - [ ] Compare with Phase 2 Slack (no curiosity baseline)
 
-### **Temporal Suspension Theory - DOCUMENTED ✓ (2026-02-14)**
-- **GOAL**: Extend static suspension to temporal/sequential contexts
-- [x] **Document Temporal Suspension Theory** - COMPLETED ✓
-  - [x] Map 4 requirements (Deferral, Difference, Trace, Iterability) to time evolution
-  - [x] Identify limitation: Current experiment covers only Level 0 (static suspension)
-  - [x] Propose next experiment: Sequence-based Suspension (Level 1)
-  - [x] Document: `docs/docs/docs/01_temporal_suspension.md`
-
-### **Temporal Suspension Experiment (Active Assembly) - IMPLEMENTED ✓ (2026-02-14)**
-- **GOAL**: Validate temporal suspension (Level 1) via active point-cloud assembly
-- **DESIGN**: Agent produces per-point displacement vectors to assemble target shapes.
-  Action and understanding are inseparable — the agent must *discover* the target shape
-  from hints and progressively revealed points, then commit to large displacements.
-- [x] **Implement Active Assembly Dataset** - COMPLETED ✓
-  - [x] `src/data/temporal_dataset.py`: Scattered initial points + target shapes
-  - [x] Progressive revelation schedule (T steps, ambiguity 0.90 → 0.00)
-  - [x] Hint points near target surface for implicit shape discovery
-  - [x] Collate function for variable-length temporal batches
-- [x] **Implement Temporal Suspension Experiment** - COMPLETED ✓
-  - [x] `experiments/temporal_suspension_experiment.py`: Main experiment script
+### **Purpose-Emergent Active Assembly - IMPLEMENTED ✓ (2026-02-14)**
+- **GOAL**: Test whether purpose (directional intent) emerges from slack without explicit target assignment
+- **DESIGN**: Agent assembles scattered points toward reference shapes (sphere, cube, cylinder) **without being told which to target**. Purpose loss is `min_shape CD(assembled, reference)`.
+- [x] **Implement Purposeless Assembly Dataset** - COMPLETED ✓
+  - [x] `src/data/purposeless_dataset.py`: Scattered initial points, no target assignment
+  - [x] Reference shapes (sphere, cube, cylinder) pre-computed and shared
+  - [x] Collate function for batch processing
+- [x] **Implement Purpose-Emergent Experiment** - COMPLETED ✓
+  - [x] `experiments/purpose_emergent_experiment.py`: Main experiment script
   - [x] DisplacementHead: context + per-point affordances → Δx ∈ R³
-  - [x] chamfer_distance_graph: Differentiable, batch-aware Chamfer Distance
-  - [x] TemporalSuspensionTrainer: Slack vs Tight mode comparison
-  - [x] Fixed per-point tensor size mismatch across temporal steps
+  - [x] Purpose loss: `min_shape CD(assembled, ref_shape)`
+  - [x] PurposeEmergentTrainer: Baseline vs purpose-emergent conditions
 - [x] **Implement Analysis Script** - COMPLETED ✓
-  - [x] `experiments/analyze_temporal_suspension.py`: ‖Δx(t)‖ dynamics, CD(t),
-        η(t)/ε(t) evolution, training curves, comprehensive 8-panel figure
+  - [x] `experiments/analyze_purpose_emergent.py`: Purpose loss trajectories, shape selection analysis
 - [x] **Integration Tests** - COMPLETED ✓
-  - [x] `tests/test_temporal_suspension.py`: 7 tests, all passing
-- [ ] **Run Experiment** (NEXT: pending design review)
-  - [ ] Run 50-epoch experiment (slack mode)
-  - [ ] Run 50-epoch experiment (tight mode)
-  - [ ] Analyze results: ‖Δx(t)‖ trajectory, CD(t), η(t)
-  - [ ] Compare slack vs tight: Does slack model show small→large displacement pattern?
+  - [x] `tests/test_purpose_emergent.py`: Dataset and model tests
+- [ ] **Run Full Experiment** (NEXT PRIORITY)
+  - [ ] Run extended training (100+ epochs)
+  - [ ] Analyze results: Does agent spontaneously choose target shapes?
+  - [ ] Track purpose loss convergence
   - [ ] Document findings
 
 ## Phase 3: Language Grounding - NOT STARTED
@@ -98,7 +84,28 @@
 
 ### HIGH PRIORITY
 
-1. **Implement Curiosity v6** (IMMEDIATE NEXT STEP)
+1. **Analyze Purpose-Emergent Experiment Results** (IMMEDIATE NEXT STEP)
+   - **Goal**: Understand whether purpose emerges from slack without target assignment
+   - **Steps**:
+     - [ ] Run extended training (100+ epochs) for both conditions
+     - [ ] Analyze purpose loss convergence patterns
+     - [ ] Track which reference shapes agent converges toward
+     - [ ] Compare purpose-emergent vs baseline conditions
+     - [ ] Measure shape selection consistency across episodes
+   - **Expected**: Agent spontaneously chooses and commits to specific shapes
+
+2. **Scale Purpose-Emergent Experiments**
+   - **Goal**: Test robustness and generalization
+   - **Steps**:
+     - [ ] Increase number of reference shapes (add torus, pyramid, etc.)
+     - [ ] Test with larger point clouds (512, 1024 points)
+     - [ ] Vary slack preservation parameters (λ_coherence)
+     - [ ] Document scaling behavior
+   - **Expected**: Purpose emergence scales with model capacity
+
+### MEDIUM PRIORITY
+
+3. **Implement Curiosity v6** (RESEARCH PRIORITY)
    - **Goal**: Test η-based curiosity in Phase 2 Slack framework
    - **Steps**:
      - [ ] Create `agent_layer_v6.py` (η-only intrinsic reward)
@@ -109,34 +116,22 @@
      - [ ] Compare with Phase 2 Slack baseline
    - **Expected**: Curiosity-driven learning improves over baseline
 
-2. **Run Temporal Suspension Experiment — Active Assembly** (AFTER DESIGN REVIEW)
-   - **Goal**: Validate temporal suspension via active point-cloud assembly
-   - **Status**: Implementation complete (v2: active assembly), awaiting design review
-   - **Steps**:
-     - [ ] Review experiment design (displacement head, Chamfer Distance, loss)
-     - [ ] Run: `python experiments/temporal_suspension_experiment.py`
-     - [ ] Analyze: `python experiments/analyze_temporal_suspension.py`
-     - [ ] Compare slack vs tight displacement patterns
-   - **Expected**: Slack model shows small→large ‖Δx‖ pattern, lower final CD
-
-### MEDIUM PRIORITY
-
-3. **Update `research_note_ja.md`**
+4. **Update `research_note_ja.md`**
    - [ ] Add Phase 2 Slack results section
    - [ ] Document η-ε correlation (r=0.835)
-   - [ ] Explain Curiosity v6 design rationale
-   - [ ] Add temporal suspension theory
-   - [ ] Include "one character" insight
+   - [ ] Add Purpose-Emergent experiment design
+   - [ ] Explain emergent goal formation hypothesis
+   - [ ] Include key insights on slack and purpose
 
-4. **Kaggle Notebook Cleanup** (OPTIONAL)
+### LOW PRIORITY
+
+5. **Kaggle Notebook Cleanup** (OPTIONAL)
    - **Status**: Local CPU experiment succeeded, Kaggle not critical
    - [ ] Fix cell order for "Run All" compatibility (if needed in future)
    - [ ] Test GPU execution (if GPU experiments become necessary)
 
-### LOW PRIORITY
-
-5. **Consider Alternative GPU Options**
-   - **Current**: Local CPU is working well for 50-epoch experiments
+6. **Consider Alternative GPU Options**
+   - **Current**: Local CPU is working well for current experiments
    - **Future**: If 100+ epochs or larger datasets are needed
    - [ ] Research CLI-based GPU rental options (Vast.ai, RunPod)
    - [ ] Test workflow on alternative platform
@@ -158,15 +153,15 @@
    - **Novelty**: KL divergence of RSSM (unchanged)
    - **NEXT**: Validate Curiosity v6 in experiments
 
-4. **Does temporal suspension require sequences?** ✓ BEING TESTED
-   - **Insight**: "One character doesn't trigger action" → context is needed
-   - **Hypothesis**: Static suspension (Level 0) ≠ Temporal suspension (Level 1)
-   - **Approach**: Active assembly — agent must discover target shape from hints
-   - **NEXT**: Run experiment and compare slack vs tight displacement patterns
+4. **Can purpose emerge without explicit targets?** ⏳ BEING TESTED
+   - **Hypothesis**: Purpose (directional intent) emerges from slack alone
+   - **Approach**: Purpose-Emergent Active Assembly — agent rewarded for approaching ANY coherent shape
+   - **Key Question**: Does agent spontaneously choose and commit to specific shapes?
+   - **NEXT**: Run extended experiments and analyze shape selection patterns
 
 ## Recent Progress (2026-02-14)
 
-### Completed Today
+### Completed
 - ✅ **Phase 2 Slack Experiment Completed** (50 epochs, local CPU)
   - η preserved: 0.502-0.520 (does not collapse to 0)
   - ε dynamic: 0.096-1.044 (observable and meaningful)
@@ -182,34 +177,25 @@
   - Rationale: η-ε correlation → η-only sufficient
   - Architecture: AgentLayerC_v6 with simplified intrinsic reward
   - Document: `CURIOSITY_V6_DESIGN.md`
-- ✅ **Temporal Suspension Theory Documented**
-  - Mapped 4 requirements to time evolution
-  - Identified static vs. temporal suspension distinction
-  - Proposed sequence-based experiment (Level 1)
-  - Document: `01_temporal_suspension.md`
-- ✅ **Committed to GitHub**
-  - Experimental results: `experiments/phase2_slack_results/`
-  - Theory documents: `docs/docs/docs/`
-  - Commit: f0f8f1e
-- ✅ **Temporal Suspension Experiment v2 (Active Assembly) Implemented**
-  - Redesigned from passive classification to active point-cloud assembly
-  - DisplacementHead replaces ConfidenceGate + ShapeClassifier
-  - Chamfer Distance as primary objective
-  - 7 integration tests, all passing
+- ✅ **Purpose-Emergent Active Assembly Implemented**
+  - Dataset: Scattered points, no target assignment
+  - Purpose loss: `min_shape CD(assembled, reference)`
+  - Tests: Integration tests passing
+  - Status: Ready for extended experiments
 
 ### Key Insights
-- **"One character doesn't trigger action"**: Suspension requires context/sequences
-- **Static ≠ Temporal**: Current experiment is Level 0 (static), need Level 1 (temporal)
 - **η-ε coupling**: Strong correlation (r=0.835) simplifies curiosity design
+- **Slack preservation**: Removing reconstruction loss allows slack to grow while task performance improves
+- **Purpose hypothesis**: Testing whether goal-directed behavior emerges without explicit targets
 
 ### Next Session Goals
-1. Review temporal suspension experiment design (active assembly v2)
-2. Run temporal suspension experiment (slack + tight, ~1-2 hours CPU)
-3. Analyze results: ‖Δx(t)‖ pattern, CD convergence, η(t) trajectory
-4. Compare slack vs tight displacement dynamics
+1. Run extended Purpose-Emergent experiments (100+ epochs)
+2. Analyze shape selection patterns and convergence
+3. Compare purpose-emergent vs baseline conditions
+4. Document findings on emergent goal formation
 5. Implement Curiosity v6 (if time permits)
 
 ---
 
 **Last Updated**: 2026-02-14  
-**Status**: Phase 2 Slack completed. Temporal suspension experiment v2 (active assembly) implemented (pending execution). Curiosity v6 designed.
+**Status**: Phase 2 Slack completed. Purpose-Emergent Active Assembly implemented (pending extended experiments). Curiosity v6 designed.
