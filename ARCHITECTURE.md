@@ -79,7 +79,7 @@ The model is trained in three distinct phases to manage the complex interplay be
 
 -   **Data Format**: The model uses **graph-based data representations** (PyTorch Geometric `Data` objects) internally to handle variable-sized point clouds and batching.
 -   **Slack Calculation**: η and ε are calculated at every forward pass and can be used as part of the loss function or as intrinsic rewards for Agent C.
--   **Model Versioning**: The current implementation is `ConditionalAdjunctionModelV4`, which includes the full three-phase logic and slack calculations.
+-   **Model Versioning**: The current implementation is `AdjunctionModel`, which includes slack calculations and the adjunction structure.
 
 ## 5. Theoretical Justification
 
@@ -91,61 +91,67 @@ This architecture is a direct implementation of the **suspension structure** con
 
 The discovery that **slack is used for exploitation, not exploration** (Slack-KL correlation -0.99) is a major finding. It suggests that the agent is not simply wandering aimlessly in its expanded space of possibilities, but is using this freedom to find more efficient and robust solutions to problems. This is the hallmark of a **competence-driven** system.
 
-## 6. Temporal Suspension Experiment — Active Assembly
+## 6. Purpose-Emergent Active Assembly
 
-Phase 2 Slack validated *static* suspension (Level 0). The **Temporal Suspension Experiment** extends this to *temporal* suspension (Level 1), where the agent must decide *how much to move* at each time step.
+The Phase 2 Slack experiments validated the foundational hypothesis of slack preservation. The **Purpose-Emergent Active Assembly** experiment extends this framework to test whether purpose (directional intent) can emerge from slack without explicit target assignment.
 
-### 6.1. Concept: Active Point-Cloud Assembly
+### 6.1. Concept: Purposeless Assembly
 
-Unlike the previous passive classification design, the agent now **actively assembles** a target shape by producing per-point displacement vectors. This makes action and understanding inseparable:
+Unlike traditional supervised learning where the agent is told what to achieve, this experiment explores emergent goal formation:
 
-- Points start randomly scattered.
-- A target shape (sphere / cube / cylinder) is chosen per episode but **not explicitly told** to the agent. A small fraction of initial points are placed near the target surface as a "hint".
-- At each time step, the agent processes the current cloud through the adjunction model and produces a **per-point displacement vector** via a DisplacementHead.
-- New points are progressively revealed from the target surface (with noise).
+- Points start randomly scattered in 3D space.
+- Multiple reference shapes (sphere, cube, cylinder) are available but the agent is **NOT told which to target**.
+- The purpose loss is `min_shape CD(assembled, reference)` — the agent is rewarded for approaching **any coherent shape**.
+- The key hypothesis: the agent should spontaneously "choose" a reference shape and move toward it.
 
-### 6.2. Dataset: Progressive Revelation with Assembly Target
+### 6.2. Dataset: PurposelessAssemblyDataset
 
-| Step | Points | Ambiguity | Content |
-| :--- | :--- | :--- | :--- |
-| 0 | ~15 | 0.90 | Scattered + few hint points near target |
-| 3 | ~94 | 0.51 | Mixed scattered + revealed target-surface points |
-| 7 | 256 | 0.00 | Full point budget; target shape fully hinted |
+The dataset generates episodes without explicit target assignments:
+
+- **Initial Points**: Randomly scattered points in 3D space (uniform distribution).
+- **Reference Shapes**: Sphere, cube, and cylinder are pre-computed and shared across all episodes.
+- **No Target Labels**: Unlike supervised tasks, no target shape is assigned per episode.
+- **Action Space**: The agent produces per-point displacement vectors to assemble the cloud.
 
 ### 6.3. Agent Action: Displacement Vectors
 
-A **DisplacementHead** maps per-point affordance features + agent context to a displacement vector Δx ∈ R³ per point. The cloud is updated as x(t+1) = x(t) + Δx(t).
+A **DisplacementHead** architecture maps the agent's context (from the adjunction model) and per-point affordance features to a displacement vector Δx ∈ R³ per point:
 
-The key hypothesis: the slack model should produce **small displacements early** (exploration / caution under ambiguity) and **large displacements later** (commitment once the target shape is clear). The tight model should commit early and fail to correct.
+- **Input**: Affordance embeddings + agent context vector
+- **Output**: Per-point displacement Δx
+- **Update Rule**: x(t+1) = x(t) + Δx(t)
 
-### 6.4. Comparison: Slack vs Tight
+The agent iteratively refines the point cloud assembly over multiple steps.
 
-| Condition | L_recon | L_coherence | Expected Behaviour |
-| :--- | :--- | :--- | :--- |
-| **Slack** (Phase 2) | Removed | Active | Small→large displacement pattern, lower final CD |
-| **Tight** (Phase 1) | Active | Removed | Early commitment, higher final CD |
+### 6.4. Loss Function
 
-### 6.5. Loss Function
+The training loss combines multiple objectives:
 
-- **L_chamfer**: Chamfer Distance between assembled cloud and target shape (primary objective)
-- **L_aff**: Affordance prediction loss
-- **L_kl**: KL divergence regularisation (RSSM)
-- **L_coherence**: Coherence regularisation (slack mode only, prevents η collapse)
-- **L_recon**: Reconstruction loss (tight mode only)
+**L = λ_purpose · L_purpose + λ_coherence · L_coherence + λ_kl · L_kl**
 
-### 6.6. Key Metrics
+Where:
+- **L_purpose**: `min_shape CD(assembled, ref_shape)` — minimum Chamfer Distance across all reference shapes
+- **L_coherence**: Coherence regularization to prevent slack collapse
+- **L_kl**: KL divergence regularization for the agent's policy
 
-- **‖Δx(t)‖ trajectory**: Displacement magnitude over time steps (exploration → commitment)
-- **CD(t) trajectory**: Chamfer Distance convergence over assembly steps
-- **η(t) trajectory**: How unit slack evolves during assembly
-- **ε(t) trajectory**: How counit slack evolves during assembly
-- **Late/Early displacement ratio**: Quantifies the exploration→commitment pattern
+The purpose loss creates a reward landscape where the agent benefits from approaching any coherent structure, without being told which one.
 
-### 6.7. Implementation
+### 6.5. Key Hypothesis
+
+**Purpose emerges from slack without explicit target assignment.**
+
+The agent should spontaneously exhibit goal-directed behavior by:
+1. Exploring the space of possible assemblies early in training
+2. Converging toward specific reference shapes as training progresses
+3. Demonstrating consistent "choices" of target shapes within episodes
+
+This would validate that intentional structure (purpose) is not imposed from outside but emerges from the slack in the agent's world model.
+
+### 6.6. Implementation
 
 | File | Purpose |
 | :--- | :--- |
-| `src/data/temporal_dataset.py` | Active assembly dataset with progressive revelation |
-| `experiments/temporal_suspension_experiment.py` | Main experiment (DisplacementHead, Trainer, Chamfer Distance) |
-| `experiments/analyze_temporal_suspension.py` | Analysis: displacement dynamics, CD, η/ε, 8-panel figure |
-| `tests/test_temporal_suspension.py` | Integration tests (7 tests, all passing) |
+| `src/data/purposeless_dataset.py` | Purposeless assembly dataset (scattered points, no target) |
+| `experiments/purpose_emergent_experiment.py` | Main experiment with purpose loss and displacement head |
+| `experiments/analyze_purpose_emergent.py` | Analysis and comparison plots |
+| `tests/test_purpose_emergent.py` | Integration tests for dataset and model |

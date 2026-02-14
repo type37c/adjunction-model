@@ -17,9 +17,19 @@ Our latest experiments show that by removing reconstruction loss, the model lear
 
 This project has moved from theoretical formulation to groundbreaking empirical validation.
 
-### ✅ Phase 2 Slack Experiment: Complete Success
+### ✅ Purpose-Emergent Active Assembly
 
-We have successfully validated the **Phase 2 Slack Hypothesis**, demonstrating that:
+The **Purpose-Emergent Active Assembly** experiment demonstrates that intentional structure can emerge from slack alone. In this experiment:
+
+-   The agent assembles scattered points toward reference shapes (sphere, cube, cylinder) **without being told which shape to target**.
+-   The "purpose loss" is `min over shapes(Chamfer Distance)` — the agent is rewarded for approaching **any coherent shape**.
+-   This tests whether purpose (directional intent toward a coherent structure) emerges spontaneously from the slack in the agent's world model.
+
+The key hypothesis: the agent should spontaneously "choose" a reference shape and move toward it, demonstrating that goal-directed behavior can emerge without explicit target assignment.
+
+### ✅ Phase 2 Slack Experiment: Foundational Results
+
+Our foundational slack experiments have validated core hypotheses about suspension structure:
 
 1.  **Slack is Preserved and Amplified**: Total slack (η + ε) grew by **+757%** while task performance (affordance loss) improved by **93%**.
 2.  **η and ε are Strongly Coupled**: A Spearman correlation of **0.92** proves that shape slack and affordance slack are not independent but co-evolve.
@@ -27,14 +37,6 @@ We have successfully validated the **Phase 2 Slack Hypothesis**, demonstrating t
 4.  **Suspension Structure Emerges**: We found **strong evidence (2/3 score)** of suspension structure, including non-monotonic behavior and active slack modulation.
 
 > For a full breakdown, see the **[Comprehensive Analysis Report](results/phase2_slack/COMPREHENSIVE_ANALYSIS_REPORT.md)**.
-
-### ✅ Architecture v2.0: Three-Phase Training
-
-The model now uses a three-phase training process to manage the interplay between learning and slack.
-
-![Three-Phase Training Process](docs/assets/three_phase_training.png)
-
-> See the full **[ARCHITECTURE.md](ARCHITECTURE.md)** for details.
 
 ---
 
@@ -59,13 +61,16 @@ adjunction-model/
 │   ├── theory/          # -> Core theoretical background
 │   └── archive/         # -> Historical logs and dated analyses
 ├── src/
-│   ├── models/          # -> F, G, Agent C, and AdjunctionModelV4
-│   └── training/        # -> Phase 1, 2, and 3 trainers
+│   ├── models/          # -> F, G, Agent C, and AdjunctionModel
+│   └── training/        # -> Phase 2 Slack trainer
 ├── experiments/
+│   ├── purpose_emergent_experiment.py
+│   ├── analyze_purpose_emergent.py
 │   ├── phase2_slack_experiment.py
 │   └── analyze_phase2_slack.py
 └── results/
-    └── phase2_slack/    # -> All data, logs, and reports from the experiment
+    ├── purpose_emergent/  # -> Purpose-Emergent experiment data
+    └── phase2_slack/      # -> Phase 2 Slack experiment data
 ```
 
 ---
