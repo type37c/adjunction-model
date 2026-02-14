@@ -58,11 +58,30 @@
   - [x] Identify limitation: Current experiment covers only Level 0 (static suspension)
   - [x] Propose next experiment: Sequence-based Suspension (Level 1)
   - [x] Document: `docs/docs/docs/01_temporal_suspension.md`
-- [ ] **Design Sequence-based Experiment** (FUTURE)
-  - [ ] Input: Shape sequences (not single shapes)
-  - [ ] Observe: η reduction over sequence length
-  - [ ] Validate: Context-dependent η/ε values
-  - [ ] Goal: Demonstrate temporal suspension (Level 1)
+
+### **Temporal Suspension Experiment - IMPLEMENTED ✓ (2026-02-14)**
+- **GOAL**: Validate temporal suspension (Level 1) with progressive shape revelation
+- [x] **Implement Temporal Shape Dataset** - COMPLETED ✓
+  - [x] `src/data/temporal_dataset.py`: Progressive revelation of 3D shapes over T steps
+  - [x] Ambiguous core (shared geometry) → shape-specific points schedule
+  - [x] Collate function for variable-length temporal batches
+- [x] **Implement Temporal Suspension Experiment** - COMPLETED ✓
+  - [x] `experiments/temporal_suspension_experiment.py`: Main experiment script
+  - [x] ConfidenceGate: Learned act/wait decision from agent context
+  - [x] ShapeClassifier: Affordance → shape category mapping
+  - [x] TemporalSuspensionTrainer: Slack vs Tight mode comparison
+  - [x] Fixed per-point tensor size mismatch across temporal steps
+- [x] **Implement Analysis Script** - COMPLETED ✓
+  - [x] `experiments/analyze_temporal_suspension.py`: η(t) evolution, confidence dynamics,
+        action timing, accuracy comparison, comprehensive 8-panel figure
+- [x] **Integration Tests** - COMPLETED ✓
+  - [x] `tests/test_temporal_suspension.py`: 6 tests, all passing
+- [ ] **Run Experiment** (NEXT: pending design review)
+  - [ ] Run 50-epoch experiment (slack mode)
+  - [ ] Run 50-epoch experiment (tight mode)
+  - [ ] Analyze results: η(t) trajectory, action timing, accuracy
+  - [ ] Compare slack vs tight: Does slack model wait longer?
+  - [ ] Document findings
 
 ## Phase 3: Language Grounding - NOT STARTED
 
@@ -86,15 +105,15 @@
      - [ ] Compare with Phase 2 Slack baseline
    - **Expected**: Curiosity-driven learning improves over baseline
 
-2. **Design Sequence-based Suspension Experiment** (AFTER CURIOSITY V6)
-   - **Goal**: Move from static (Level 0) to temporal (Level 1) suspension
-   - **Key Insight**: "One character doesn't trigger action" → sequences are needed
+2. **Run Temporal Suspension Experiment** (AFTER DESIGN REVIEW)
+   - **Goal**: Validate temporal suspension (Level 1) with progressive shape revelation
+   - **Status**: Implementation complete, awaiting design review before execution
    - **Steps**:
-     - [ ] Design dataset: Shape sequences (e.g., 3-5 shapes)
-     - [ ] Modify model: Process sequences with RSSM
-     - [ ] Observe: η(t) as function of sequence position
-     - [ ] Validate: η decreases as context accumulates
-   - **Expected**: η reduction over sequence = suspension resolution
+     - [ ] Review experiment design (dataset, model, metrics)
+     - [ ] Run: `python experiments/temporal_suspension_experiment.py`
+     - [ ] Analyze: `python experiments/analyze_temporal_suspension.py`
+     - [ ] Compare slack vs tight model behaviour
+   - **Expected**: Slack model waits longer and achieves higher accuracy
 
 ### MEDIUM PRIORITY
 
@@ -174,12 +193,12 @@
 - **η-ε coupling**: Strong correlation (r=0.835) simplifies curiosity design
 
 ### Next Session Goals
-1. Implement Curiosity v6 (1-2 hours)
-2. Run Curiosity v6 experiment (2-3 hours)
-3. Analyze results and compare with Phase 2 Slack baseline
-4. Design sequence-based experiment for temporal suspension
+1. Review temporal suspension experiment design
+2. Run temporal suspension experiment (slack + tight, ~1-2 hours CPU)
+3. Analyze results and compare slack vs tight
+4. Implement Curiosity v6 (if time permits)
 
 ---
 
 **Last Updated**: 2026-02-14  
-**Status**: Phase 2 Slack completed and analyzed. Curiosity v6 designed. Ready for implementation.
+**Status**: Phase 2 Slack completed. Temporal suspension experiment implemented (pending execution). Curiosity v6 designed.

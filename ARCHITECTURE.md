@@ -89,4 +89,44 @@ This architecture is a direct implementation of the **suspension structure** con
 -   **Phase 2** introduces the "geology" by removing the reconstruction constraint, allowing the riverbed to become flexible and dynamic.
 -   **Phase 3** lets the agent navigate this dynamic landscape to achieve its goals.
 
-The discovery that **slack is used for exploitation, not exploration** (Slack-KL correlation -0.99) is a major finding. It suggests that the agent is not simply wandering aimlessly in its expanded space of possibilities, but is using this freedom to find more efficient and robust solutions to problems. This is the hallmark of a **competence-driven** system** system.
+The discovery that **slack is used for exploitation, not exploration** (Slack-KL correlation -0.99) is a major finding. It suggests that the agent is not simply wandering aimlessly in its expanded space of possibilities, but is using this freedom to find more efficient and robust solutions to problems. This is the hallmark of a **competence-driven** system.
+
+## 6. Temporal Suspension Experiment
+
+Phase 2 Slack validated *static* suspension (Level 0). The **Temporal Suspension Experiment** extends this to *temporal* suspension (Level 1), where the agent must decide *when* to act.
+
+### 6.1. Dataset: Progressive Shape Revelation
+
+A 3D shape is revealed over T time steps. Early steps contain only an **ambiguous core** (points that could belong to any shape); later steps add **shape-specific** points.
+
+| Step | Points | Ambiguity | Content |
+| :--- | :--- | :--- | :--- |
+| 0 | ~30 | 0.90 | Mostly ambiguous core |
+| 3 | ~190 | 0.51 | Mixed core + shape-specific |
+| 7 | 512 | 0.00 | Full shape revealed |
+
+### 6.2. Agent Decision: Act or Wait
+
+A **ConfidenceGate** maps the agent's context vector to a scalar confidence c(t) in [0, 1]. The agent "acts" (classifies the shape) at the first step where c(t) > threshold.
+
+### 6.3. Comparison: Slack vs Tight
+
+| Condition | L_recon | L_coherence | Expected Behaviour |
+| :--- | :--- | :--- | :--- |
+| **Slack** (Phase 2) | Removed | Active | Waits longer, higher accuracy |
+| **Tight** (Phase 1) | Active | Removed | Acts early, lower accuracy |
+
+### 6.4. Key Metrics
+
+- **η(t) trajectory**: How unit slack evolves as the shape is revealed
+- **Action timing**: Mean step at which the agent commits
+- **Classification accuracy**: Correctness at the chosen action step
+
+### 6.5. Implementation
+
+| File | Purpose |
+| :--- | :--- |
+| `src/data/temporal_dataset.py` | Progressive revelation dataset |
+| `experiments/temporal_suspension_experiment.py` | Main experiment script |
+| `experiments/analyze_temporal_suspension.py` | Analysis and visualisation |
+| `tests/test_temporal_suspension.py` | Integration tests (6 tests) |
