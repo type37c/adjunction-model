@@ -59,28 +59,32 @@
   - [x] Propose next experiment: Sequence-based Suspension (Level 1)
   - [x] Document: `docs/docs/docs/01_temporal_suspension.md`
 
-### **Temporal Suspension Experiment - IMPLEMENTED ✓ (2026-02-14)**
-- **GOAL**: Validate temporal suspension (Level 1) with progressive shape revelation
-- [x] **Implement Temporal Shape Dataset** - COMPLETED ✓
-  - [x] `src/data/temporal_dataset.py`: Progressive revelation of 3D shapes over T steps
-  - [x] Ambiguous core (shared geometry) → shape-specific points schedule
+### **Temporal Suspension Experiment (Active Assembly) - IMPLEMENTED ✓ (2026-02-14)**
+- **GOAL**: Validate temporal suspension (Level 1) via active point-cloud assembly
+- **DESIGN**: Agent produces per-point displacement vectors to assemble target shapes.
+  Action and understanding are inseparable — the agent must *discover* the target shape
+  from hints and progressively revealed points, then commit to large displacements.
+- [x] **Implement Active Assembly Dataset** - COMPLETED ✓
+  - [x] `src/data/temporal_dataset.py`: Scattered initial points + target shapes
+  - [x] Progressive revelation schedule (T steps, ambiguity 0.90 → 0.00)
+  - [x] Hint points near target surface for implicit shape discovery
   - [x] Collate function for variable-length temporal batches
 - [x] **Implement Temporal Suspension Experiment** - COMPLETED ✓
   - [x] `experiments/temporal_suspension_experiment.py`: Main experiment script
-  - [x] ConfidenceGate: Learned act/wait decision from agent context
-  - [x] ShapeClassifier: Affordance → shape category mapping
+  - [x] DisplacementHead: context + per-point affordances → Δx ∈ R³
+  - [x] chamfer_distance_graph: Differentiable, batch-aware Chamfer Distance
   - [x] TemporalSuspensionTrainer: Slack vs Tight mode comparison
   - [x] Fixed per-point tensor size mismatch across temporal steps
 - [x] **Implement Analysis Script** - COMPLETED ✓
-  - [x] `experiments/analyze_temporal_suspension.py`: η(t) evolution, confidence dynamics,
-        action timing, accuracy comparison, comprehensive 8-panel figure
+  - [x] `experiments/analyze_temporal_suspension.py`: ‖Δx(t)‖ dynamics, CD(t),
+        η(t)/ε(t) evolution, training curves, comprehensive 8-panel figure
 - [x] **Integration Tests** - COMPLETED ✓
-  - [x] `tests/test_temporal_suspension.py`: 6 tests, all passing
+  - [x] `tests/test_temporal_suspension.py`: 7 tests, all passing
 - [ ] **Run Experiment** (NEXT: pending design review)
   - [ ] Run 50-epoch experiment (slack mode)
   - [ ] Run 50-epoch experiment (tight mode)
-  - [ ] Analyze results: η(t) trajectory, action timing, accuracy
-  - [ ] Compare slack vs tight: Does slack model wait longer?
+  - [ ] Analyze results: ‖Δx(t)‖ trajectory, CD(t), η(t)
+  - [ ] Compare slack vs tight: Does slack model show small→large displacement pattern?
   - [ ] Document findings
 
 ## Phase 3: Language Grounding - NOT STARTED
@@ -105,15 +109,15 @@
      - [ ] Compare with Phase 2 Slack baseline
    - **Expected**: Curiosity-driven learning improves over baseline
 
-2. **Run Temporal Suspension Experiment** (AFTER DESIGN REVIEW)
-   - **Goal**: Validate temporal suspension (Level 1) with progressive shape revelation
-   - **Status**: Implementation complete, awaiting design review before execution
+2. **Run Temporal Suspension Experiment — Active Assembly** (AFTER DESIGN REVIEW)
+   - **Goal**: Validate temporal suspension via active point-cloud assembly
+   - **Status**: Implementation complete (v2: active assembly), awaiting design review
    - **Steps**:
-     - [ ] Review experiment design (dataset, model, metrics)
+     - [ ] Review experiment design (displacement head, Chamfer Distance, loss)
      - [ ] Run: `python experiments/temporal_suspension_experiment.py`
      - [ ] Analyze: `python experiments/analyze_temporal_suspension.py`
-     - [ ] Compare slack vs tight model behaviour
-   - **Expected**: Slack model waits longer and achieves higher accuracy
+     - [ ] Compare slack vs tight displacement patterns
+   - **Expected**: Slack model shows small→large ‖Δx‖ pattern, lower final CD
 
 ### MEDIUM PRIORITY
 
@@ -154,10 +158,11 @@
    - **Novelty**: KL divergence of RSSM (unchanged)
    - **NEXT**: Validate Curiosity v6 in experiments
 
-4. **Does temporal suspension require sequences?** ✓ NEW QUESTION
+4. **Does temporal suspension require sequences?** ✓ BEING TESTED
    - **Insight**: "One character doesn't trigger action" → context is needed
    - **Hypothesis**: Static suspension (Level 0) ≠ Temporal suspension (Level 1)
-   - **NEXT**: Design sequence-based experiment to test
+   - **Approach**: Active assembly — agent must discover target shape from hints
+   - **NEXT**: Run experiment and compare slack vs tight displacement patterns
 
 ## Recent Progress (2026-02-14)
 
@@ -186,6 +191,11 @@
   - Experimental results: `experiments/phase2_slack_results/`
   - Theory documents: `docs/docs/docs/`
   - Commit: f0f8f1e
+- ✅ **Temporal Suspension Experiment v2 (Active Assembly) Implemented**
+  - Redesigned from passive classification to active point-cloud assembly
+  - DisplacementHead replaces ConfidenceGate + ShapeClassifier
+  - Chamfer Distance as primary objective
+  - 7 integration tests, all passing
 
 ### Key Insights
 - **"One character doesn't trigger action"**: Suspension requires context/sequences
@@ -193,12 +203,13 @@
 - **η-ε coupling**: Strong correlation (r=0.835) simplifies curiosity design
 
 ### Next Session Goals
-1. Review temporal suspension experiment design
+1. Review temporal suspension experiment design (active assembly v2)
 2. Run temporal suspension experiment (slack + tight, ~1-2 hours CPU)
-3. Analyze results and compare slack vs tight
-4. Implement Curiosity v6 (if time permits)
+3. Analyze results: ‖Δx(t)‖ pattern, CD convergence, η(t) trajectory
+4. Compare slack vs tight displacement dynamics
+5. Implement Curiosity v6 (if time permits)
 
 ---
 
 **Last Updated**: 2026-02-14  
-**Status**: Phase 2 Slack completed. Temporal suspension experiment implemented (pending execution). Curiosity v6 designed.
+**Status**: Phase 2 Slack completed. Temporal suspension experiment v2 (active assembly) implemented (pending execution). Curiosity v6 designed.

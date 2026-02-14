@@ -91,42 +91,61 @@ This architecture is a direct implementation of the **suspension structure** con
 
 The discovery that **slack is used for exploitation, not exploration** (Slack-KL correlation -0.99) is a major finding. It suggests that the agent is not simply wandering aimlessly in its expanded space of possibilities, but is using this freedom to find more efficient and robust solutions to problems. This is the hallmark of a **competence-driven** system.
 
-## 6. Temporal Suspension Experiment
+## 6. Temporal Suspension Experiment — Active Assembly
 
-Phase 2 Slack validated *static* suspension (Level 0). The **Temporal Suspension Experiment** extends this to *temporal* suspension (Level 1), where the agent must decide *when* to act.
+Phase 2 Slack validated *static* suspension (Level 0). The **Temporal Suspension Experiment** extends this to *temporal* suspension (Level 1), where the agent must decide *how much to move* at each time step.
 
-### 6.1. Dataset: Progressive Shape Revelation
+### 6.1. Concept: Active Point-Cloud Assembly
 
-A 3D shape is revealed over T time steps. Early steps contain only an **ambiguous core** (points that could belong to any shape); later steps add **shape-specific** points.
+Unlike the previous passive classification design, the agent now **actively assembles** a target shape by producing per-point displacement vectors. This makes action and understanding inseparable:
+
+- Points start randomly scattered.
+- A target shape (sphere / cube / cylinder) is chosen per episode but **not explicitly told** to the agent. A small fraction of initial points are placed near the target surface as a "hint".
+- At each time step, the agent processes the current cloud through the adjunction model and produces a **per-point displacement vector** via a DisplacementHead.
+- New points are progressively revealed from the target surface (with noise).
+
+### 6.2. Dataset: Progressive Revelation with Assembly Target
 
 | Step | Points | Ambiguity | Content |
 | :--- | :--- | :--- | :--- |
-| 0 | ~30 | 0.90 | Mostly ambiguous core |
-| 3 | ~190 | 0.51 | Mixed core + shape-specific |
-| 7 | 512 | 0.00 | Full shape revealed |
+| 0 | ~15 | 0.90 | Scattered + few hint points near target |
+| 3 | ~94 | 0.51 | Mixed scattered + revealed target-surface points |
+| 7 | 256 | 0.00 | Full point budget; target shape fully hinted |
 
-### 6.2. Agent Decision: Act or Wait
+### 6.3. Agent Action: Displacement Vectors
 
-A **ConfidenceGate** maps the agent's context vector to a scalar confidence c(t) in [0, 1]. The agent "acts" (classifies the shape) at the first step where c(t) > threshold.
+A **DisplacementHead** maps per-point affordance features + agent context to a displacement vector Δx ∈ R³ per point. The cloud is updated as x(t+1) = x(t) + Δx(t).
 
-### 6.3. Comparison: Slack vs Tight
+The key hypothesis: the slack model should produce **small displacements early** (exploration / caution under ambiguity) and **large displacements later** (commitment once the target shape is clear). The tight model should commit early and fail to correct.
+
+### 6.4. Comparison: Slack vs Tight
 
 | Condition | L_recon | L_coherence | Expected Behaviour |
 | :--- | :--- | :--- | :--- |
-| **Slack** (Phase 2) | Removed | Active | Waits longer, higher accuracy |
-| **Tight** (Phase 1) | Active | Removed | Acts early, lower accuracy |
+| **Slack** (Phase 2) | Removed | Active | Small→large displacement pattern, lower final CD |
+| **Tight** (Phase 1) | Active | Removed | Early commitment, higher final CD |
 
-### 6.4. Key Metrics
+### 6.5. Loss Function
 
-- **η(t) trajectory**: How unit slack evolves as the shape is revealed
-- **Action timing**: Mean step at which the agent commits
-- **Classification accuracy**: Correctness at the chosen action step
+- **L_chamfer**: Chamfer Distance between assembled cloud and target shape (primary objective)
+- **L_aff**: Affordance prediction loss
+- **L_kl**: KL divergence regularisation (RSSM)
+- **L_coherence**: Coherence regularisation (slack mode only, prevents η collapse)
+- **L_recon**: Reconstruction loss (tight mode only)
 
-### 6.5. Implementation
+### 6.6. Key Metrics
+
+- **‖Δx(t)‖ trajectory**: Displacement magnitude over time steps (exploration → commitment)
+- **CD(t) trajectory**: Chamfer Distance convergence over assembly steps
+- **η(t) trajectory**: How unit slack evolves during assembly
+- **ε(t) trajectory**: How counit slack evolves during assembly
+- **Late/Early displacement ratio**: Quantifies the exploration→commitment pattern
+
+### 6.7. Implementation
 
 | File | Purpose |
 | :--- | :--- |
-| `src/data/temporal_dataset.py` | Progressive revelation dataset |
-| `experiments/temporal_suspension_experiment.py` | Main experiment script |
-| `experiments/analyze_temporal_suspension.py` | Analysis and visualisation |
-| `tests/test_temporal_suspension.py` | Integration tests (6 tests) |
+| `src/data/temporal_dataset.py` | Active assembly dataset with progressive revelation |
+| `experiments/temporal_suspension_experiment.py` | Main experiment (DisplacementHead, Trainer, Chamfer Distance) |
+| `experiments/analyze_temporal_suspension.py` | Analysis: displacement dynamics, CD, η/ε, 8-panel figure |
+| `tests/test_temporal_suspension.py` | Integration tests (7 tests, all passing) |

@@ -1,32 +1,46 @@
 """
-Temporal Suspension Experiment
+Temporal Suspension Experiment — Active Point-Cloud Assembly
 
 This experiment validates whether an agent with slack (Phase 2 trained) can
-appropriately *defer* action when information is ambiguous and *commit* only
-when the shape becomes sufficiently clear.
+appropriately *defer* large displacements when the target shape is ambiguous,
+and *commit* decisively once the shape becomes clear.
 
 Theoretical basis:
     docs/docs/docs/01_temporal_suspension.md
     docs/theory/suspension_and_confidence.md
 
 Experiment design:
-    1. A shape is progressively revealed over T time steps.
-    2. At each step the model processes the current partial point cloud and
-       produces η(t) (unit slack) and ε(t) (counit slack).
-    3. Agent C decides "act" or "wait" based on a learned confidence gate.
-    4. We compare two conditions:
-       (a) Phase-2-Slack model  — trained with slack preservation
-       (b) Phase-1-Only model   — trained with reconstruction loss (tight η)
-    5. Metrics: η(t) trajectory, action timing, classification accuracy.
+    1. Points start randomly scattered.  A target shape (sphere / cube /
+       cylinder) is chosen per episode but NOT explicitly told to the agent.
+       A small fraction of initial points are placed near the target surface
+       as a "hint".
+    2. At each time step t = 0 … T-1 the agent processes the current cloud
+       through the adjunction model and produces a per-point displacement
+       vector via a DisplacementHead.
+    3. Points are moved by the predicted displacement.  New points are
+       revealed (progressive schedule) and appended to the cloud.
+    4. Reward = negative Chamfer Distance between the assembled cloud and
+       the target shape.
+
+    Two conditions:
+        (a) 'slack'  — Phase 2 Slack model (no reconstruction loss)
+        (b) 'tight'  — Phase 1 style (with reconstruction loss → η minimised)
 
 Key hypothesis:
-    The slack model should *wait longer* (defer action) when the shape is
-    ambiguous, and achieve higher accuracy when it finally acts.
+    The slack model should produce *small* displacements early (exploration)
+    and *large* displacements later (commitment), achieving lower final
+    Chamfer Distance.  The tight model should commit early and fail to
+    correct.
+
+Metrics recorded per step:
+    - η(t), ε(t)
+    - displacement magnitude ‖Δx(t)‖
+    - Chamfer Distance to target
+    - affordance prediction quality
 
 Implementation notes:
-    - Follows the same structure as phase2_slack_experiment.py
-    - Uses collate_temporal_batch from temporal_dataset.py
-    - Reuses AdjunctionModel and Phase2SlackTrainer from existing codebase
+    - Follows the structure of phase2_slack_experiment.py
+    - Reuses AdjunctionModel from existing codebase
     - CPU-friendly: 50 epochs, small dataset
 """
 
@@ -47,140 +61,164 @@ from src.data.temporal_dataset import (
     TemporalShapeDataset,
     collate_temporal_batch,
 )
-from src.training.train_phase2_slack import Phase2SlackTrainer
 
 
 # ======================================================================
-# Confidence Gate — decides "act" vs "wait"
+# Displacement Head — maps per-point features to displacement vectors
 # ======================================================================
 
-class ConfidenceGate(nn.Module):
+class DisplacementHead(nn.Module):
     """
-    A small network that maps the agent's internal state to a scalar
-    confidence c(t) in [0, 1].  The agent "acts" when c(t) > threshold.
+    Produces a per-point displacement vector Δx ∈ R³ from the agent's
+    context and per-point affordance features.
 
-    Input:  agent context vector (B, context_dim)
-    Output: confidence (B, 1) via sigmoid
+    Architecture:
+        context (B, context_dim) is broadcast to every point, concatenated
+        with per-point affordance features (N, num_affordances), then
+        mapped to (N, 3) through a small MLP.
+
+    The output is *not* clamped — the loss landscape naturally encourages
+    the model to learn appropriate magnitudes.
     """
 
-    def __init__(self, context_dim: int = 128):
+    def __init__(self, context_dim: int = 128, num_affordances: int = 5):
         super().__init__()
+        input_dim = context_dim + num_affordances
         self.net = nn.Sequential(
-            nn.Linear(context_dim, 64),
+            nn.Linear(input_dim, 64),
             nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 3),
         )
 
-    def forward(self, context: torch.Tensor) -> torch.Tensor:
-        """Returns confidence in [0, 1], shape (B, 1)."""
-        return torch.sigmoid(self.net(context))
+    def forward(
+        self,
+        context: torch.Tensor,
+        affordances: torch.Tensor,
+        batch_idx: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            context:     (B, context_dim)
+            affordances: (N, num_affordances)  per-point
+            batch_idx:   (N,) long
+
+        Returns:
+            displacement: (N, 3)
+        """
+        # Broadcast context to each point
+        ctx_per_point = context[batch_idx]          # (N, context_dim)
+        feat = torch.cat([ctx_per_point, affordances], dim=-1)  # (N, C+A)
+        return self.net(feat)                       # (N, 3)
 
 
 # ======================================================================
-# Affordance Classifier — maps per-point affordances to shape category
+# Chamfer Distance (differentiable, batch-aware)
 # ======================================================================
 
-class ShapeClassifier(nn.Module):
+def chamfer_distance_graph(
+    assembled: torch.Tensor,
+    target: torch.Tensor,
+    batch_idx: torch.Tensor,
+    batch_size: int,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Maps aggregated affordance predictions to a shape-category logit.
+    Compute Chamfer Distance between assembled (graph-format) and target
+    (batched-format) point clouds.
 
-    Input:  affordance vector (B, num_affordances)
-    Output: logits (B, num_classes)
+    Args:
+        assembled: (N, 3)  graph-format assembled cloud
+        target:    (B, M, 3)  target clouds (all same M)
+        batch_idx: (N,) long  batch assignment for assembled
+        batch_size: B
+
+    Returns:
+        cd_per_sample: (B,)  Chamfer Distance per sample
+        cd_mean:       scalar  mean over batch
     """
+    cd_list = []
+    for b in range(batch_size):
+        mask = (batch_idx == b)
+        pts_a = assembled[mask]            # (n_b, 3)
+        pts_t = target[b]                  # (M, 3)
 
-    def __init__(self, num_affordances: int = 5, num_classes: int = 3):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(num_affordances, 32),
-            nn.ReLU(),
-            nn.Linear(32, num_classes),
-        )
+        if pts_a.size(0) == 0:
+            cd_list.append(torch.tensor(0.0, device=assembled.device))
+            continue
 
-    def forward(self, affordances: torch.Tensor) -> torch.Tensor:
-        return self.net(affordances)
+        dist = torch.cdist(pts_a, pts_t)   # (n_b, M)
+        d_a2t = dist.min(dim=1)[0].mean()  # assembled → target
+        d_t2a = dist.min(dim=0)[0].mean()  # target → assembled
+        cd_list.append((d_a2t + d_t2a) / 2)
+
+    cd_per_sample = torch.stack(cd_list)
+    return cd_per_sample, cd_per_sample.mean()
 
 
 # ======================================================================
-# Temporal Suspension Trainer
+# Temporal Suspension Trainer (Active Assembly)
 # ======================================================================
 
 class TemporalSuspensionTrainer:
     """
-    Trainer for the temporal suspension experiment.
+    Trainer for the active point-cloud assembly experiment.
 
-    For each sequence:
-        1. Process time steps 0 … T-1 through the adjunction model.
-        2. At each step, record η(t), ε(t), confidence c(t).
-        3. The agent "acts" at the first step where c(t) > threshold.
-        4. Loss = classification loss (at action time) + timing penalty.
+    For each episode:
+        1. Start with scattered initial points.
+        2. At each step t:
+           a. Run adjunction model on current cloud → context, affordances,
+              η(t), ε(t).
+           b. DisplacementHead produces Δx(t) per point.
+           c. Move points: x(t+1) = x(t) + Δx(t).
+           d. Reveal new points (from target surface + noise) and append.
+        3. Loss = Chamfer Distance (final assembled vs target)
+                + affordance loss + KL + coherence regularisation
+                + (optional) reconstruction loss for 'tight' mode.
 
-    Two training modes:
-        - 'slack':   Phase 2 Slack model (no reconstruction loss)
-        - 'tight':   Phase 1 model (with reconstruction loss → η minimised)
+    Two modes:
+        'slack':  No reconstruction loss → η preserved
+        'tight':  With reconstruction loss → η minimised
     """
 
     def __init__(
         self,
         model: AdjunctionModel,
-        confidence_gate: ConfidenceGate,
-        classifier: ShapeClassifier,
+        displacement_head: DisplacementHead,
         device: torch.device = torch.device('cpu'),
         lr: float = 1e-4,
-        confidence_threshold: float = 0.5,
-        lambda_aff: float = 1.0,
+        lambda_chamfer: float = 1.0,
+        lambda_aff: float = 0.5,
         lambda_kl: float = 0.1,
         lambda_coherence: float = 0.1,
-        lambda_timing: float = 0.05,
-        lambda_cls: float = 1.0,
-        mode: str = 'slack',
         lambda_recon: float = 1.0,
+        mode: str = 'slack',
     ):
-        """
-        Args:
-            model: AdjunctionModel instance
-            confidence_gate: ConfidenceGate instance
-            classifier: ShapeClassifier instance
-            device: torch device
-            lr: learning rate
-            confidence_threshold: threshold for "act" decision
-            lambda_aff: weight for affordance loss
-            lambda_kl: weight for KL divergence
-            lambda_coherence: weight for coherence regularization
-            lambda_timing: weight for timing penalty (encourages waiting)
-            lambda_cls: weight for classification loss
-            mode: 'slack' (no L_recon) or 'tight' (with L_recon)
-            lambda_recon: weight for reconstruction loss (only in 'tight' mode)
-        """
         self.model = model.to(device)
-        self.confidence_gate = confidence_gate.to(device)
-        self.classifier = classifier.to(device)
+        self.displacement_head = displacement_head.to(device)
         self.device = device
-        self.confidence_threshold = confidence_threshold
         self.mode = mode
 
         # Loss weights
+        self.lambda_chamfer = lambda_chamfer
         self.lambda_aff = lambda_aff
         self.lambda_kl = lambda_kl
         self.lambda_coherence = lambda_coherence
-        self.lambda_timing = lambda_timing
-        self.lambda_cls = lambda_cls
         self.lambda_recon = lambda_recon
 
         # Loss functions
         self.aff_criterion = nn.MSELoss()
-        self.cls_criterion = nn.CrossEntropyLoss()
         self.recon_criterion = nn.MSELoss()
 
-        # Single optimizer for all parameters
+        # Single optimiser for all trainable parameters
         all_params = (
-            list(model.parameters()) +
-            list(confidence_gate.parameters()) +
-            list(classifier.parameters())
+            list(model.parameters())
+            + list(displacement_head.parameters())
         )
         self.optimizer = optim.Adam(all_params, lr=lr)
 
     # ------------------------------------------------------------------
-    # Process a single time step
+    # Process one time step
     # ------------------------------------------------------------------
 
     def _step(
@@ -189,57 +227,91 @@ class TemporalSuspensionTrainer:
         batch_idx: torch.Tensor,
         agent_state: Dict[str, torch.Tensor],
         coherence_prev: torch.Tensor,
-        coherence_spatial_prev: Optional[torch.Tensor] = None,
-    ) -> Tuple[Dict, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        coherence_spatial_prev: Optional[torch.Tensor],
+    ) -> Dict:
         """
-        Run one forward pass of the adjunction model on a partial point cloud.
+        Run the adjunction model + displacement head on the current cloud.
 
-        Returns:
-            results: full model output dict
-            eta: (B, 1) unit slack
-            eps: (B, 1) counit slack
-            confidence: (B, 1) confidence gate output
-            affordances_batched: (B, num_affordances) mean affordance per sample
+        Returns a dict with:
+            results     – raw model outputs
+            displacement – (N, 3) per-point displacement
+            eta         – (B, 1)
+            eps         – (B, 1)
+            aff_batched – (B, A) mean affordance per sample
         """
         N = pos.size(0)
 
-        # In temporal sequences each step has a different number of points.
-        # coherence_spatial_prev comes from the *previous* step with N_{t-1}
-        # points, but the current step has N_t points.  We must provide a
-        # spatial coherence vector of length N_t.  When the sizes differ we
-        # simply reset to zeros — this is safe because the model uses
-        # coherence_spatial only as an input signal, and the first step's
-        # spatial coherence is always zero anyway.
+        # Reset per-point tensors that may have stale sizes
         if coherence_spatial_prev is None or coherence_spatial_prev.size(0) != N:
             coherence_spatial_prev = torch.zeros(N, device=self.device)
 
-        # The agent_state may carry 'priority_normalized' from the previous
-        # time step, whose length matches the *previous* point count N_{t-1}.
-        # Remove it so that AgentC falls back to uniform attention.
         state_clean = {k: v for k, v in agent_state.items()
-                       if k not in ('priority_normalized',)}
+                       if k != 'priority_normalized'}
 
         results = self.model(
-            pos, batch_idx, state_clean, coherence_prev, coherence_spatial_prev
+            pos, batch_idx, state_clean, coherence_prev,
+            coherence_spatial_prev,
         )
 
-        eta = results['coherence_signal']    # (B, 1)
-        eps = results['counit_signal']       # (B, 1)
-        context = results['context']         # (B, context_dim)
+        eta = results['coherence_signal']       # (B, 1)
+        eps = results['counit_signal']          # (B, 1)
+        context = results['context']            # (B, context_dim)
+        affordances = results['affordances']    # (N, A)
 
-        confidence = self.confidence_gate(context)  # (B, 1)
+        # Displacement from context + per-point affordances
+        displacement = self.displacement_head(
+            context, affordances, batch_idx)     # (N, 3)
 
-        # Aggregate per-point affordances to per-sample
-        affordances = results['affordances']  # (N, num_affordances)
-        batch_size = batch_idx.max().item() + 1
-        num_aff = affordances.size(-1)
-        aff_batched = torch.zeros(batch_size, num_aff, device=self.device)
-        for b in range(batch_size):
+        # Aggregate affordances per sample for logging / loss
+        B = batch_idx.max().item() + 1
+        A = affordances.size(-1)
+        aff_batched = torch.zeros(B, A, device=self.device)
+        for b in range(B):
             mask = (batch_idx == b)
             if mask.sum() > 0:
                 aff_batched[b] = affordances[mask].mean(dim=0)
 
-        return results, eta, eps, confidence, aff_batched
+        return {
+            'results': results,
+            'displacement': displacement,
+            'eta': eta,
+            'eps': eps,
+            'aff_batched': aff_batched,
+        }
+
+    # ------------------------------------------------------------------
+    # Reveal new points at step t
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _reveal_points(
+        current_pos: torch.Tensor,
+        current_batch: torch.Tensor,
+        target_points: torch.Tensor,
+        n_new: int,
+        batch_size: int,
+        noise_std: float,
+        device: torch.device,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Append *n_new* points per sample, sampled from the target surface
+        with added noise (simulating progressive revelation).
+
+        Returns updated (pos, batch_idx).
+        """
+        new_pts_list = []
+        new_batch_list = []
+        for b in range(batch_size):
+            tgt = target_points[b]                          # (M, 3)
+            idx = torch.randint(0, tgt.size(0), (n_new,))
+            pts = tgt[idx] + torch.randn(n_new, 3, device=device) * noise_std
+            new_pts_list.append(pts)
+            new_batch_list.append(
+                torch.full((n_new,), b, dtype=torch.long, device=device))
+
+        pos_new = torch.cat([current_pos] + new_pts_list, dim=0)
+        batch_new = torch.cat([current_batch] + new_batch_list, dim=0)
+        return pos_new, batch_new
 
     # ------------------------------------------------------------------
     # Train one epoch
@@ -250,67 +322,78 @@ class TemporalSuspensionTrainer:
         dataloader: DataLoader,
         epoch: int,
     ) -> Dict[str, float]:
-        """Train for one epoch over temporal sequences."""
+        """Train for one epoch over episodes."""
         self.model.train()
-        self.confidence_gate.train()
-        self.classifier.train()
+        self.displacement_head.train()
 
         accum = {
-            'loss': 0.0, 'aff': 0.0, 'kl': 0.0, 'coherence': 0.0,
-            'cls': 0.0, 'timing': 0.0, 'recon': 0.0,
-            'mean_action_step': 0.0, 'accuracy': 0.0,
+            'loss': 0.0, 'chamfer': 0.0, 'aff': 0.0, 'kl': 0.0,
+            'coherence': 0.0, 'recon': 0.0,
         }
-        # Per-step η/ε accumulators (keyed by step index)
+        # Per-step accumulators
         eta_by_step: Dict[int, List[float]] = {}
         eps_by_step: Dict[int, List[float]] = {}
-        conf_by_step: Dict[int, List[float]] = {}
+        disp_mag_by_step: Dict[int, List[float]] = {}
+        cd_by_step: Dict[int, List[float]] = {}
         num_batches = 0
 
         for batch_data in dataloader:
-            pts_seq = batch_data['points_sequence']   # list of T dicts
-            affordances_gt = batch_data['affordances'].to(self.device)
+            init_pts = batch_data['initial_points'].to(self.device)
+            init_batch = batch_data['initial_batch'].to(self.device)
+            target_pts = batch_data['target_points'].to(self.device)
+            target_aff = batch_data['target_affordances'].to(self.device)
+            rev_counts = batch_data['revelation_counts']    # (T,) long
             shape_types = batch_data['shape_types']
-            ambiguity = batch_data['ambiguity_schedule'].to(self.device)
 
-            T = len(pts_seq)
-            B = affordances_gt.size(0)
+            T = rev_counts.size(0)
+            B = target_pts.size(0)
 
-            # Initialise agent state
+            # Initialise
             agent_state = self.model.initial_state(B, self.device)
             coherence_prev = torch.zeros(B, 1, device=self.device)
             coherence_spatial_prev = None
 
-            # Accumulators for this sequence
-            etas: List[torch.Tensor] = []
-            epss: List[torch.Tensor] = []
-            confs: List[torch.Tensor] = []
-            aff_preds: List[torch.Tensor] = []
+            pos = init_pts.clone()
+            batch_idx = init_batch.clone()
+
             kl_losses: List[torch.Tensor] = []
+            aff_preds: List[torch.Tensor] = []
 
             # ---- Process each time step ----
             for t in range(T):
-                pos_t = pts_seq[t]['points'].to(self.device)
-                batch_t = pts_seq[t]['batch'].to(self.device)
-
-                results, eta_t, eps_t, conf_t, aff_t = self._step(
-                    pos_t, batch_t, agent_state, coherence_prev,
+                step_out = self._step(
+                    pos, batch_idx, agent_state, coherence_prev,
                     coherence_spatial_prev,
                 )
 
-                etas.append(eta_t)
-                epss.append(eps_t)
-                confs.append(conf_t)
-                aff_preds.append(aff_t)
+                results = step_out['results']
+                displacement = step_out['displacement']
+                eta_t = step_out['eta']
+                eps_t = step_out['eps']
+                aff_t = step_out['aff_batched']
 
-                # KL divergence
+                # Record displacement magnitude
+                disp_mag = displacement.norm(dim=-1).mean().item()
+                disp_mag_by_step.setdefault(t, []).append(disp_mag)
+
+                # Move points
+                pos = pos + displacement
+
+                # Chamfer Distance at this step
+                _, cd_mean = chamfer_distance_graph(
+                    pos, target_pts, batch_idx, B)
+                cd_by_step.setdefault(t, []).append(cd_mean.item())
+
+                # KL
                 rssm_info = results['rssm_info']
                 kl_t = self.model.agent_c.rssm.kl_divergence(
                     rssm_info['posterior_mean'], rssm_info['posterior_std'],
                     rssm_info['prior_mean'], rssm_info['prior_std'],
                 ).mean()
                 kl_losses.append(kl_t)
+                aff_preds.append(aff_t)
 
-                # Update carry-over state
+                # Carry-over state
                 agent_state = results['agent_state']
                 coherence_prev = eta_t.detach()
                 coherence_spatial_prev = results['coherence_spatial'].detach()
@@ -318,145 +401,109 @@ class TemporalSuspensionTrainer:
                 # Record per-step stats
                 eta_by_step.setdefault(t, []).append(eta_t.mean().item())
                 eps_by_step.setdefault(t, []).append(eps_t.mean().item())
-                conf_by_step.setdefault(t, []).append(conf_t.mean().item())
 
-            # ---- Stack temporal tensors ----
-            etas_t = torch.stack(etas, dim=1)     # (B, T, 1)
-            confs_t = torch.stack(confs, dim=1)   # (B, T, 1)
-            aff_preds_t = torch.stack(aff_preds, dim=1)  # (B, T, num_aff)
+                # Reveal new points (except at last step)
+                if t < T - 1:
+                    n_current = int(rev_counts[t].item())
+                    n_next = int(rev_counts[t + 1].item())
+                    n_new = max(0, n_next - n_current)
+                    if n_new > 0:
+                        pos, batch_idx = self._reveal_points(
+                            pos, batch_idx, target_pts, n_new, B,
+                            noise_std=0.05, device=self.device,
+                        )
 
-            # ---- Determine action step per sample ----
-            # "act" at first step where confidence > threshold
-            conf_sq = confs_t.squeeze(-1)         # (B, T)
-            acted = conf_sq > self.confidence_threshold
-            # If never acted, default to last step
-            action_steps = torch.full((B,), T - 1, dtype=torch.long,
-                                      device=self.device)
-            for b in range(B):
-                indices = torch.where(acted[b])[0]
-                if len(indices) > 0:
-                    action_steps[b] = indices[0]
+            # ---- Losses ----
 
-            # ---- Compute losses ----
+            # 1. Chamfer Distance (final assembled vs target)
+            _, L_chamfer = chamfer_distance_graph(
+                pos, target_pts, batch_idx, B)
 
-            # 1. Affordance loss at the action step
-            aff_at_action = aff_preds_t[
-                torch.arange(B, device=self.device), action_steps]  # (B, A)
-            # Ground truth: average affordance per sample
-            B_gt, N_gt, A_gt = affordances_gt.shape
-            aff_gt_mean = affordances_gt.mean(dim=1)  # (B, A)
-            L_aff = self.aff_criterion(aff_at_action, aff_gt_mean)
+            # 2. Affordance loss (average over steps)
+            aff_gt_mean = target_aff.mean(dim=1)        # (B, A)
+            L_aff = torch.stack([
+                self.aff_criterion(a, aff_gt_mean) for a in aff_preds
+            ]).mean()
 
-            # 2. KL divergence (average over steps)
+            # 3. KL divergence
             L_kl = torch.stack(kl_losses).mean()
 
-            # 3. Coherence regularization (prevent η collapse)
-            eta_mean = etas_t.mean()
+            # 4. Coherence regularisation (prevent η collapse)
+            eta_vals = torch.stack(
+                [step_out['eta'] for _ in range(1)])  # use last step
+            # Collect all η values from this episode
+            eta_mean = eta_t.mean()
             L_coherence = -torch.log(eta_mean + 1e-8)
 
-            # 4. Classification loss at action step
-            logits = self.classifier(aff_at_action)
-            targets = torch.tensor(shape_types, dtype=torch.long,
-                                   device=self.device)
-            L_cls = self.cls_criterion(logits, targets)
-
-            # 5. Timing penalty: penalise acting too early (encourage waiting)
-            # Reward = (action_step / T) — higher is better (waited longer)
-            # Penalty = 1 - reward = fraction of unused steps
-            # But we also penalise acting too late (time cost)
-            # Net: quadratic around optimal timing
-            normalised_step = action_steps.float() / (T - 1)
-            # Ideal: act when ambiguity is low.  Use ambiguity at action step.
-            amb_at_action = ambiguity[
-                torch.arange(B, device=self.device), action_steps]
-            # Penalty: high if acted while ambiguity is still high
-            L_timing = (amb_at_action ** 2).mean()
-
-            # 6. Reconstruction loss (only in 'tight' mode)
+            # 5. Reconstruction loss (only 'tight' mode)
             L_recon = torch.tensor(0.0, device=self.device)
             if self.mode == 'tight':
-                # Use final step's reconstructed vs original
-                pts_final = batch_data['points_final']['points'].to(self.device)
-                batch_final = batch_data['points_final']['batch'].to(self.device)
-                # Re-run model on final points to get reconstruction
-                with torch.no_grad():
-                    final_state = self.model.initial_state(B, self.device)
-                    final_coh = torch.zeros(B, 1, device=self.device)
-                results_final = self.model(
-                    pts_final, batch_final, final_state, final_coh)
-                reconstructed = results_final['reconstructed']  # (B, P, 3)
-                # Convert original to batched form for MSE
-                pts_batched = []
+                # Use the last step's reconstructed output
+                reconstructed = results['reconstructed']  # (B, P, 3)
+                # Build padded version of assembled cloud for MSE
+                pts_per_sample = []
                 for b_i in range(B):
-                    mask = (batch_final == b_i)
-                    pts_batched.append(pts_final[mask])
-                max_n = max(p.size(0) for p in pts_batched)
+                    mask = (batch_idx == b_i)
+                    pts_per_sample.append(pos[mask])
+                max_n = max(p.size(0) for p in pts_per_sample)
                 pts_padded = torch.stack([
                     torch.cat([p, torch.zeros(max_n - p.size(0), 3,
                                               device=self.device)])
-                    for p in pts_batched
+                    for p in pts_per_sample
                 ])
-                # Truncate to match
                 min_n = min(pts_padded.size(1), reconstructed.size(1))
                 L_recon = self.recon_criterion(
                     reconstructed[:, :min_n, :], pts_padded[:, :min_n, :])
 
             # ---- Total loss ----
             loss = (
-                self.lambda_aff * L_aff
+                self.lambda_chamfer * L_chamfer
+                + self.lambda_aff * L_aff
                 + self.lambda_kl * L_kl
                 + self.lambda_coherence * L_coherence
-                + self.lambda_cls * L_cls
-                + self.lambda_timing * L_timing
-                + (self.lambda_recon * L_recon if self.mode == 'tight' else 0)
+                * (1.0 if self.mode == 'slack' else 0.0)
+                + self.lambda_recon * L_recon
+                * (1.0 if self.mode == 'tight' else 0.0)
             )
 
             # ---- Backward ----
             self.optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
-                list(self.model.parameters()) +
-                list(self.confidence_gate.parameters()) +
-                list(self.classifier.parameters()),
+                list(self.model.parameters())
+                + list(self.displacement_head.parameters()),
                 max_norm=1.0,
             )
             self.optimizer.step()
 
-            # ---- Accuracy ----
-            preds = logits.argmax(dim=-1)
-            correct = (preds == targets).float().mean().item()
-
             # ---- Accumulate ----
             accum['loss'] += loss.item()
+            accum['chamfer'] += L_chamfer.item()
             accum['aff'] += L_aff.item()
             accum['kl'] += L_kl.item()
             accum['coherence'] += L_coherence.item()
-            accum['cls'] += L_cls.item()
-            accum['timing'] += L_timing.item()
             accum['recon'] += L_recon.item()
-            accum['mean_action_step'] += action_steps.float().mean().item()
-            accum['accuracy'] += correct
             num_batches += 1
 
             if num_batches % 5 == 0:
                 print(
                     f"  Batch {num_batches}: "
                     f"Loss={loss.item():.4f}, "
-                    f"Cls={L_cls.item():.4f}, "
-                    f"Acc={correct:.2f}, "
-                    f"ActStep={action_steps.float().mean().item():.1f}/{T-1}"
+                    f"CD={L_chamfer.item():.4f}, "
+                    f"Aff={L_aff.item():.4f}, "
+                    f"‖Δx‖={disp_mag:.4f}"
                 )
 
         # ---- Average metrics ----
         metrics = {k: v / max(num_batches, 1) for k, v in accum.items()}
-
-        # Per-step η, ε, confidence
         metrics['eta_by_step'] = {
-            t: float(np.mean(vals)) for t, vals in eta_by_step.items()}
+            t: float(np.mean(v)) for t, v in eta_by_step.items()}
         metrics['eps_by_step'] = {
-            t: float(np.mean(vals)) for t, vals in eps_by_step.items()}
-        metrics['conf_by_step'] = {
-            t: float(np.mean(vals)) for t, vals in conf_by_step.items()}
+            t: float(np.mean(v)) for t, v in eps_by_step.items()}
+        metrics['disp_mag_by_step'] = {
+            t: float(np.mean(v)) for t, v in disp_mag_by_step.items()}
+        metrics['cd_by_step'] = {
+            t: float(np.mean(v)) for t, v in cd_by_step.items()}
 
         return metrics
 
@@ -466,90 +513,92 @@ class TemporalSuspensionTrainer:
 
     @torch.no_grad()
     def validate(self, dataloader: DataLoader) -> Dict[str, float]:
-        """Validate on temporal sequences (no gradient)."""
+        """Validate on episodes (no gradient)."""
         self.model.eval()
-        self.confidence_gate.eval()
-        self.classifier.eval()
+        self.displacement_head.eval()
 
         accum = {
-            'accuracy': 0.0, 'mean_action_step': 0.0,
-            'unit_eta_final': 0.0, 'counit_eps_final': 0.0,
+            'chamfer': 0.0, 'aff': 0.0,
         }
         eta_by_step: Dict[int, List[float]] = {}
         eps_by_step: Dict[int, List[float]] = {}
-        conf_by_step: Dict[int, List[float]] = {}
+        disp_mag_by_step: Dict[int, List[float]] = {}
+        cd_by_step: Dict[int, List[float]] = {}
         num_batches = 0
 
         for batch_data in dataloader:
-            pts_seq = batch_data['points_sequence']
-            affordances_gt = batch_data['affordances'].to(self.device)
-            shape_types = batch_data['shape_types']
+            init_pts = batch_data['initial_points'].to(self.device)
+            init_batch = batch_data['initial_batch'].to(self.device)
+            target_pts = batch_data['target_points'].to(self.device)
+            target_aff = batch_data['target_affordances'].to(self.device)
+            rev_counts = batch_data['revelation_counts']
 
-            T = len(pts_seq)
-            B = affordances_gt.size(0)
+            T = rev_counts.size(0)
+            B = target_pts.size(0)
 
             agent_state = self.model.initial_state(B, self.device)
             coherence_prev = torch.zeros(B, 1, device=self.device)
             coherence_spatial_prev = None
 
-            confs_list = []
-            aff_list = []
-            last_eta = None
-            last_eps = None
+            pos = init_pts.clone()
+            batch_idx = init_batch.clone()
 
             for t in range(T):
-                pos_t = pts_seq[t]['points'].to(self.device)
-                batch_t = pts_seq[t]['batch'].to(self.device)
-
-                results, eta_t, eps_t, conf_t, aff_t = self._step(
-                    pos_t, batch_t, agent_state, coherence_prev,
+                step_out = self._step(
+                    pos, batch_idx, agent_state, coherence_prev,
                     coherence_spatial_prev,
                 )
-                confs_list.append(conf_t)
-                aff_list.append(aff_t)
-                last_eta = eta_t
-                last_eps = eps_t
+                results = step_out['results']
+                displacement = step_out['displacement']
+
+                disp_mag = displacement.norm(dim=-1).mean().item()
+                disp_mag_by_step.setdefault(t, []).append(disp_mag)
+
+                pos = pos + displacement
+
+                _, cd_mean = chamfer_distance_graph(
+                    pos, target_pts, batch_idx, B)
+                cd_by_step.setdefault(t, []).append(cd_mean.item())
 
                 agent_state = results['agent_state']
-                coherence_prev = eta_t
+                coherence_prev = step_out['eta']
                 coherence_spatial_prev = results['coherence_spatial']
 
-                eta_by_step.setdefault(t, []).append(eta_t.mean().item())
-                eps_by_step.setdefault(t, []).append(eps_t.mean().item())
-                conf_by_step.setdefault(t, []).append(conf_t.mean().item())
+                eta_by_step.setdefault(t, []).append(
+                    step_out['eta'].mean().item())
+                eps_by_step.setdefault(t, []).append(
+                    step_out['eps'].mean().item())
 
-            confs_t = torch.stack(confs_list, dim=1).squeeze(-1)  # (B, T)
-            aff_preds_t = torch.stack(aff_list, dim=1)            # (B, T, A)
+                if t < T - 1:
+                    n_cur = int(rev_counts[t].item())
+                    n_nxt = int(rev_counts[t + 1].item())
+                    n_new = max(0, n_nxt - n_cur)
+                    if n_new > 0:
+                        pos, batch_idx = self._reveal_points(
+                            pos, batch_idx, target_pts, n_new, B,
+                            noise_std=0.05, device=self.device,
+                        )
 
-            acted = confs_t > self.confidence_threshold
-            action_steps = torch.full((B,), T - 1, dtype=torch.long,
-                                      device=self.device)
-            for b in range(B):
-                indices = torch.where(acted[b])[0]
-                if len(indices) > 0:
-                    action_steps[b] = indices[0]
+            # Final Chamfer Distance
+            _, cd_final = chamfer_distance_graph(
+                pos, target_pts, batch_idx, B)
+            accum['chamfer'] += cd_final.item()
 
-            aff_at_action = aff_preds_t[
-                torch.arange(B, device=self.device), action_steps]
-            logits = self.classifier(aff_at_action)
-            targets = torch.tensor(shape_types, dtype=torch.long,
-                                   device=self.device)
-            preds = logits.argmax(dim=-1)
-            correct = (preds == targets).float().mean().item()
-
-            accum['accuracy'] += correct
-            accum['mean_action_step'] += action_steps.float().mean().item()
-            accum['unit_eta_final'] += last_eta.mean().item()
-            accum['counit_eps_final'] += last_eps.mean().item()
+            # Affordance loss
+            aff_gt_mean = target_aff.mean(dim=1)
+            aff_pred = step_out['aff_batched']
+            accum['aff'] += self.aff_criterion(aff_pred, aff_gt_mean).item()
             num_batches += 1
 
         metrics = {k: v / max(num_batches, 1) for k, v in accum.items()}
         metrics['eta_by_step'] = {
-            t: float(np.mean(vals)) for t, vals in eta_by_step.items()}
+            t: float(np.mean(v)) for t, v in eta_by_step.items()}
         metrics['eps_by_step'] = {
-            t: float(np.mean(vals)) for t, vals in eps_by_step.items()}
-        metrics['conf_by_step'] = {
-            t: float(np.mean(vals)) for t, vals in conf_by_step.items()}
+            t: float(np.mean(v)) for t, v in eps_by_step.items()}
+        metrics['disp_mag_by_step'] = {
+            t: float(np.mean(v)) for t, v in disp_mag_by_step.items()}
+        metrics['cd_by_step'] = {
+            t: float(np.mean(v)) for t, v in cd_by_step.items()}
         return metrics
 
 
@@ -560,26 +609,26 @@ class TemporalSuspensionTrainer:
 def run_temporal_suspension_experiment(
     num_epochs: int = 50,
     num_samples: int = 100,
-    num_points_final: int = 512,
+    num_points_final: int = 256,
     num_time_steps: int = 8,
     batch_size: int = 4,
     lr: float = 1e-4,
-    confidence_threshold: float = 0.5,
     device: str = 'cpu',
 ):
     """
-    Run the full temporal suspension experiment.
+    Run the full active assembly experiment.
 
     Trains two models:
         (a) 'slack' — Phase 2 Slack (no reconstruction loss)
         (b) 'tight' — Phase 1 style (with reconstruction loss)
 
-    Compares their temporal behaviour.
+    Compares their temporal behaviour (displacement patterns, η(t), CD(t)).
     """
     device = torch.device(device)
     print(f"Device: {device}")
 
-    output_dir = Path("/home/ubuntu/adjunction-model/results/temporal_suspension")
+    output_dir = Path(
+        "/home/ubuntu/adjunction-model/results/temporal_suspension")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- Dataset ----
@@ -622,68 +671,67 @@ def run_temporal_suspension_experiment(
             beta_competence=0.6,
             gamma_novelty=0.4,
         )
-        gate = ConfidenceGate(context_dim=128)
-        classifier = ShapeClassifier(num_affordances=5, num_classes=3)
+        disp_head = DisplacementHead(context_dim=128, num_affordances=5)
 
         trainer = TemporalSuspensionTrainer(
             model=model,
-            confidence_gate=gate,
-            classifier=classifier,
+            displacement_head=disp_head,
             device=device,
             lr=lr,
-            confidence_threshold=confidence_threshold,
-            mode=mode,
-            lambda_aff=1.0,
+            lambda_chamfer=1.0,
+            lambda_aff=0.5,
             lambda_kl=0.1,
             lambda_coherence=0.1 if mode == 'slack' else 0.0,
-            lambda_timing=0.05,
-            lambda_cls=1.0,
             lambda_recon=1.0 if mode == 'tight' else 0.0,
+            mode=mode,
         )
 
         history: Dict[str, list] = {
-            'loss': [], 'aff': [], 'kl': [], 'coherence': [],
-            'cls': [], 'timing': [], 'recon': [],
-            'mean_action_step': [], 'accuracy': [],
-            'val_accuracy': [], 'val_action_step': [],
-            'val_eta_final': [], 'val_eps_final': [],
-            'eta_by_step': [], 'eps_by_step': [], 'conf_by_step': [],
+            'loss': [], 'chamfer': [], 'aff': [], 'kl': [],
+            'coherence': [], 'recon': [],
+            'val_chamfer': [], 'val_aff': [],
+            'eta_by_step': [], 'eps_by_step': [],
+            'disp_mag_by_step': [], 'cd_by_step': [],
+            'val_eta_by_step': [], 'val_eps_by_step': [],
+            'val_disp_mag_by_step': [], 'val_cd_by_step': [],
         }
 
-        for epoch in range(num_epochs):
-            print(f"\nEpoch {epoch + 1}/{num_epochs} [{mode}]")
+        for ep in range(num_epochs):
+            print(f"\nEpoch {ep + 1}/{num_epochs} [{mode}]")
             print("-" * 60)
 
-            train_m = trainer.train_epoch(dataloader, epoch)
+            train_m = trainer.train_epoch(dataloader, ep)
             val_m = trainer.validate(val_loader)
 
-            # Record scalar metrics
-            for key in ['loss', 'aff', 'kl', 'coherence', 'cls', 'timing',
-                        'recon', 'mean_action_step', 'accuracy']:
+            # Scalar metrics
+            for key in ['loss', 'chamfer', 'aff', 'kl', 'coherence',
+                        'recon']:
                 history[key].append(train_m[key])
-            history['val_accuracy'].append(val_m['accuracy'])
-            history['val_action_step'].append(val_m['mean_action_step'])
-            history['val_eta_final'].append(val_m['unit_eta_final'])
-            history['val_eps_final'].append(val_m['counit_eps_final'])
+            history['val_chamfer'].append(val_m['chamfer'])
+            history['val_aff'].append(val_m['aff'])
 
-            # Record per-step metrics
-            history['eta_by_step'].append(train_m['eta_by_step'])
-            history['eps_by_step'].append(train_m['eps_by_step'])
-            history['conf_by_step'].append(train_m['conf_by_step'])
+            # Per-step metrics
+            for key in ['eta_by_step', 'eps_by_step',
+                        'disp_mag_by_step', 'cd_by_step']:
+                history[key].append(train_m[key])
+            for key in ['eta_by_step', 'eps_by_step',
+                        'disp_mag_by_step', 'cd_by_step']:
+                history[f'val_{key}'].append(val_m[key])
 
+            # Print summary
+            disp_vals = list(train_m['disp_mag_by_step'].values())
+            disp_early = np.mean(disp_vals[:2]) if len(disp_vals) >= 2 else 0
+            disp_late = np.mean(disp_vals[-2:]) if len(disp_vals) >= 2 else 0
             print(
                 f"  Loss={train_m['loss']:.4f}  "
+                f"CD={train_m['chamfer']:.4f}  "
                 f"Aff={train_m['aff']:.4f}  "
-                f"Cls={train_m['cls']:.4f}  "
-                f"Acc={train_m['accuracy']:.2f}  "
-                f"ActStep={train_m['mean_action_step']:.1f}  "
-                f"η_mean={np.mean(list(train_m['eta_by_step'].values())):.4f}"
+                f"‖Δx‖_early={disp_early:.4f}  "
+                f"‖Δx‖_late={disp_late:.4f}"
             )
             print(
-                f"  [Val] Acc={val_m['accuracy']:.2f}  "
-                f"ActStep={val_m['mean_action_step']:.1f}  "
-                f"η_final={val_m['unit_eta_final']:.4f}  "
-                f"ε_final={val_m['counit_eps_final']:.4f}"
+                f"  [Val] CD={val_m['chamfer']:.4f}  "
+                f"Aff={val_m['aff']:.4f}"
             )
 
         all_histories[mode] = history
@@ -692,11 +740,10 @@ def run_temporal_suspension_experiment(
         mode_dir = output_dir / mode
         mode_dir.mkdir(parents=True, exist_ok=True)
 
-        # Convert history to JSON-serialisable form
+        # Convert to JSON-serialisable form
         history_json = {}
         for k, v in history.items():
-            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
-                # Per-step dicts: convert int keys to str
+            if isinstance(v, list) and v and isinstance(v[0], dict):
                 history_json[k] = [
                     {str(kk): vv for kk, vv in d.items()} for d in v
                 ]
@@ -705,28 +752,30 @@ def run_temporal_suspension_experiment(
         with open(mode_dir / 'metrics.json', 'w') as f:
             json.dump(history_json, f, indent=2)
 
-        # Save model
+        # Save model weights
         torch.save(model.state_dict(), mode_dir / 'model.pt')
-        torch.save(gate.state_dict(), mode_dir / 'gate.pt')
-        torch.save(classifier.state_dict(), mode_dir / 'classifier.pt')
+        torch.save(disp_head.state_dict(), mode_dir / 'displacement_head.pt')
 
         print(f"\n{mode} results saved to {mode_dir}")
 
-    # ---- Save combined summary ----
-    summary = {
-        'slack': {
-            'final_accuracy': all_histories['slack']['val_accuracy'][-1],
-            'final_action_step': all_histories['slack']['val_action_step'][-1],
-            'final_eta': all_histories['slack']['val_eta_final'][-1],
-            'final_eps': all_histories['slack']['val_eps_final'][-1],
-        },
-        'tight': {
-            'final_accuracy': all_histories['tight']['val_accuracy'][-1],
-            'final_action_step': all_histories['tight']['val_action_step'][-1],
-            'final_eta': all_histories['tight']['val_eta_final'][-1],
-            'final_eps': all_histories['tight']['val_eps_final'][-1],
-        },
-    }
+    # ---- Combined summary ----
+    summary = {}
+    for mode in ['slack', 'tight']:
+        h = all_histories[mode]
+        summary[mode] = {
+            'final_chamfer': h['val_chamfer'][-1],
+            'final_aff': h['val_aff'][-1],
+            'final_eta_by_step': h['val_eta_by_step'][-1],
+            'final_disp_mag_by_step': h['val_disp_mag_by_step'][-1],
+            'final_cd_by_step': h['val_cd_by_step'][-1],
+        }
+    # Convert int keys to str for JSON
+    for mode in summary:
+        for k in ['final_eta_by_step', 'final_disp_mag_by_step',
+                   'final_cd_by_step']:
+            summary[mode][k] = {
+                str(kk): vv for kk, vv in summary[mode][k].items()}
+
     with open(output_dir / 'summary.json', 'w') as f:
         json.dump(summary, f, indent=2)
 
@@ -746,10 +795,9 @@ if __name__ == '__main__':
     run_temporal_suspension_experiment(
         num_epochs=50,
         num_samples=100,
-        num_points_final=512,
+        num_points_final=256,
         num_time_steps=8,
         batch_size=4,
         lr=1e-4,
-        confidence_threshold=0.5,
         device='cpu',
     )

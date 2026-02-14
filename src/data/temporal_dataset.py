@@ -1,56 +1,58 @@
 """
-Temporal Suspension Dataset: Progressive Shape Revelation
+Temporal Suspension Dataset: Active Point-Cloud Assembly
 
-This module generates synthetic sequences where a 3D shape is progressively
-revealed over multiple time steps. At early steps, the point cloud is ambiguous
-(could be multiple shapes); as more points are added, the shape becomes clear.
+This module generates synthetic data for the *active* temporal suspension
+experiment.  Unlike the previous "passive classification" design, the agent
+must now **move** points to construct a target shape.
 
 Theoretical motivation (from docs/docs/docs/01_temporal_suspension.md):
-- Level 0 (static): Single shape → affordance (already validated)
-- Level 1 (temporal): Shape *sequence* → affordance over time
-- Key insight: "One character doesn't trigger action" — context is needed
+    - Action and understanding become inseparable: moving points *is*
+      understanding the shape.
+    - Suspension emerges naturally: early on, the target is ambiguous, so
+      the agent cannot commit to large displacements.  Once enough evidence
+      accumulates, it can act decisively.
+    - Slack models should explore cautiously then commit; tight models
+      should commit early and fail to correct.
 
 Design:
-- Each sequence has T time steps
-- At step t, a subset of the final point cloud is revealed
-- Early steps are deliberately ambiguous (shared geometry between shapes)
-- Later steps add discriminative points that resolve ambiguity
-- The agent must decide at each step: "act" (classify) or "wait"
+    - Each episode has T time steps.
+    - At step 0 the agent receives a small set of randomly scattered points
+      plus a *hint* (a few points already near the target surface).
+    - At each subsequent step, additional points are revealed (same
+      progressive-revelation schedule as before).
+    - The agent's task: output a displacement vector for every visible point
+      so that the final configuration matches the target shape.
+    - Ground truth: the target shape (sphere, cube, cylinder) as a point
+      cloud.  Reward is the negative Chamfer Distance between the agent's
+      assembled cloud and the target.
 
-Data format:
-- Each sample is a dict with:
-    - 'points_sequence': list of T tensors, each (num_points_at_t, 3)
-    - 'affordances': (num_points_final, NUM_AFFORDANCES) ground truth
-    - 'shape_type': int, true shape category
-    - 'ambiguity_schedule': (T,) float, how ambiguous the shape is at each step
+Data format (per sample):
+    - 'initial_points':    (N_0, 3)  randomly scattered starting positions
+    - 'target_points':     (N_final, 3)  the goal shape
+    - 'target_affordances': (N_final, NUM_AFFORDANCES)  affordance labels
+    - 'shape_type':        int  (0=cube, 1=cylinder, 2=sphere)
+    - 'hint_mask':         (N_0,) bool  which initial points are "hints"
+    - 'revelation_counts': (T,) int  cumulative point count at each step
+    - 'ambiguity_schedule': (T,) float  ambiguity at each step
 """
 
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from typing import Tuple, Dict, List, Optional
+from typing import Dict, List, Optional
 
 
 class TemporalShapeDataset(Dataset):
     """
-    Generates sequences of progressively revealed 3D point clouds.
+    Generates episodes for the active point-cloud assembly task.
 
-    Shape types (same as SyntheticAffordanceDataset for compatibility):
-    - 0: Cube (graspable, liftable, stackable)
-    - 1: Cylinder (graspable, rollable, containable)
-    - 2: Sphere (graspable, rollable)
+    Shape types (compatible with SyntheticAffordanceDataset):
+        0: Cube   (graspable, liftable, stackable)
+        1: Cylinder (graspable, rollable, containable)
+        2: Sphere  (graspable, rollable)
 
     Affordance types:
-    - 0: grasp
-    - 1: lift
-    - 2: support (stack on top)
-    - 3: contain
-    - 4: roll
-
-    Revelation strategy:
-    - Steps 1-2: Only points from the "ambiguous core" (shared geometry)
-    - Steps 3-4: Gradually add shape-specific points
-    - Steps 5+:  Full shape with all discriminative features
+        0: grasp   1: lift   2: support   3: contain   4: roll
     """
 
     AFFORDANCE_NAMES = ['grasp', 'lift', 'support', 'contain', 'roll']
@@ -67,330 +69,231 @@ class TemporalShapeDataset(Dataset):
     def __init__(
         self,
         num_samples: int = 100,
-        num_points_final: int = 512,
+        num_points_final: int = 256,
         num_time_steps: int = 8,
-        shape_types: List[int] = [0, 1, 2],
-        noise_std: float = 0.01,
-        ambiguity_base: float = 0.3,
-        seed: int = 42
+        shape_types: Optional[List[int]] = None,
+        noise_std: float = 0.02,
+        scatter_radius: float = 1.5,
+        hint_ratio: float = 0.15,
+        seed: int = 42,
     ):
         """
         Args:
-            num_samples: Number of sequences to generate
-            num_points_final: Number of points in the fully revealed shape
-            num_time_steps: Number of time steps T in each sequence
-            shape_types: List of shape type indices to include
-            noise_std: Standard deviation of Gaussian noise added to points
-            ambiguity_base: Base radius for the ambiguous core region
-            seed: Random seed for reproducibility
+            num_samples:     Number of episodes to generate.
+            num_points_final: Total points in the fully revealed cloud.
+            num_time_steps:  Number of time steps T per episode.
+            shape_types:     Which shape categories to include.
+            noise_std:       Gaussian noise added to target shapes.
+            scatter_radius:  Radius of the initial random scatter.
+            hint_ratio:      Fraction of initial points placed near the
+                             target surface (shape hint).
+            seed:            Random seed for reproducibility.
         """
+        if shape_types is None:
+            shape_types = [0, 1, 2]
+
         self.num_samples = num_samples
         self.num_points_final = num_points_final
         self.num_time_steps = num_time_steps
         self.shape_types = shape_types
         self.noise_std = noise_std
-        self.ambiguity_base = ambiguity_base
+        self.scatter_radius = scatter_radius
+        self.hint_ratio = hint_ratio
 
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-        # Pre-generate all samples
+        self.revelation_counts = self._compute_revelation_schedule()
+        self.ambiguity_ratios = self._compute_ambiguity_schedule()
         self.samples = self._generate_all_samples()
 
     # ------------------------------------------------------------------
-    # Shape generators (reused from SyntheticAffordanceDataset patterns)
+    # Shape generators
     # ------------------------------------------------------------------
 
     def _generate_cube(self, n: int, size: float = 1.0) -> np.ndarray:
-        """Generate n points on a cube surface."""
+        """Generate *n* points on a cube surface."""
         points = []
-        points_per_face = max(1, n // 6)
+        ppf = max(1, n // 6)
         for axis in range(3):
             for sign in [-1, 1]:
-                face = np.random.uniform(-size / 2, size / 2, (points_per_face, 3))
+                face = np.random.uniform(-size / 2, size / 2, (ppf, 3))
                 face[:, axis] = sign * size / 2
                 points.append(face)
-        points = np.vstack(points)
-        return self._adjust_count(points, n)
+        return self._adjust_count(np.vstack(points), n)
 
     def _generate_cylinder(self, n: int, radius: float = 0.5,
                            height: float = 1.0) -> np.ndarray:
-        """Generate n points on a cylinder surface."""
-        num_curved = int(n * 0.7)
-        num_cap = (n - num_curved) // 2
-
-        # Curved surface
-        theta = np.random.uniform(0, 2 * np.pi, num_curved)
-        z = np.random.uniform(-height / 2, height / 2, num_curved)
-        x = radius * np.cos(theta)
-        y = radius * np.sin(theta)
-        parts = [np.stack([x, y, z], axis=1)]
-
-        # Caps
+        """Generate *n* points on a cylinder surface."""
+        n_curved = int(n * 0.7)
+        n_cap = (n - n_curved) // 2
+        theta = np.random.uniform(0, 2 * np.pi, n_curved)
+        z = np.random.uniform(-height / 2, height / 2, n_curved)
+        parts = [np.stack([radius * np.cos(theta),
+                           radius * np.sin(theta), z], axis=1)]
         for z_val in [-height / 2, height / 2]:
-            r = np.random.uniform(0, radius, num_cap)
-            th = np.random.uniform(0, 2 * np.pi, num_cap)
+            r = np.random.uniform(0, radius, n_cap)
+            th = np.random.uniform(0, 2 * np.pi, n_cap)
             parts.append(np.stack([r * np.cos(th), r * np.sin(th),
-                                   np.full(num_cap, z_val)], axis=1))
-        points = np.vstack(parts)
-        return self._adjust_count(points, n)
+                                   np.full(n_cap, z_val)], axis=1))
+        return self._adjust_count(np.vstack(parts), n)
 
     def _generate_sphere(self, n: int, radius: float = 0.5) -> np.ndarray:
-        """Generate n points on a sphere surface (Fibonacci)."""
-        indices = np.arange(0, n, dtype=float) + 0.5
-        phi = np.arccos(1 - 2 * indices / n)
-        theta = np.pi * (1 + 5 ** 0.5) * indices
-        x = radius * np.cos(theta) * np.sin(phi)
-        y = radius * np.sin(theta) * np.sin(phi)
-        z = radius * np.cos(phi)
-        return np.stack([x, y, z], axis=1)
+        """Generate *n* points on a sphere surface (Fibonacci)."""
+        idx = np.arange(0, n, dtype=float) + 0.5
+        phi = np.arccos(1 - 2 * idx / n)
+        theta = np.pi * (1 + 5 ** 0.5) * idx
+        return np.stack([radius * np.cos(theta) * np.sin(phi),
+                         radius * np.sin(theta) * np.sin(phi),
+                         radius * np.cos(phi)], axis=1)
 
     @staticmethod
-    def _adjust_count(points: np.ndarray, target: int) -> np.ndarray:
-        """Pad or trim a point array to exactly *target* rows."""
-        if points.shape[0] > target:
-            return points[:target]
-        elif points.shape[0] < target:
-            shortage = target - points.shape[0]
-            idx = np.random.choice(points.shape[0], shortage, replace=True)
-            return np.vstack([points, points[idx]])
-        return points
+    def _adjust_count(pts: np.ndarray, target: int) -> np.ndarray:
+        if pts.shape[0] > target:
+            return pts[:target]
+        elif pts.shape[0] < target:
+            extra = np.random.choice(pts.shape[0], target - pts.shape[0],
+                                     replace=True)
+            return np.vstack([pts, pts[extra]])
+        return pts
 
     # ------------------------------------------------------------------
-    # Ambiguous core generation
-    # ------------------------------------------------------------------
-
-    def _generate_ambiguous_core(self, n: int) -> np.ndarray:
-        """
-        Generate points that are geometrically ambiguous — they could belong
-        to any of the three shape categories.
-
-        Strategy: sample from a sphere of radius ``ambiguity_base``.  All three
-        shapes (cube, cylinder, sphere) share a roughly spherical core when only
-        a few points are visible and noise is present.
-        """
-        # Uniform random points inside a sphere
-        r = self.ambiguity_base * np.cbrt(np.random.uniform(0, 1, n))
-        theta = np.random.uniform(0, 2 * np.pi, n)
-        phi = np.arccos(2 * np.random.uniform(0, 1, n) - 1)
-        x = r * np.sin(phi) * np.cos(theta)
-        y = r * np.sin(phi) * np.sin(theta)
-        z = r * np.cos(phi)
-        return np.stack([x, y, z], axis=1)
-
-    # ------------------------------------------------------------------
-    # Sequence generation
+    # Schedules
     # ------------------------------------------------------------------
 
     def _compute_revelation_schedule(self) -> np.ndarray:
-        """
-        Compute how many points are revealed at each time step.
-
-        Returns:
-            counts: (T,) int array — cumulative point counts at each step.
-                    counts[-1] == num_points_final.
-        """
+        """Cumulative point count at each step.  counts[-1] == N_final."""
         T = self.num_time_steps
-        # Exponential-ish ramp: few points early, many later
         raw = np.power(np.linspace(0.15, 1.0, T), 1.5)
-        raw = raw / raw[-1]  # normalise so last step = 1.0
+        raw = raw / raw[-1]
         counts = np.round(raw * self.num_points_final).astype(int)
-        counts[-1] = self.num_points_final  # guarantee exact final count
-        # Ensure monotonically increasing and at least 8 points per step
+        counts[-1] = self.num_points_final
         for i in range(T):
             counts[i] = max(counts[i], 8)
             if i > 0:
                 counts[i] = max(counts[i], counts[i - 1])
         return counts
 
-    def _compute_ambiguity_ratio(self) -> np.ndarray:
-        """
-        Compute the fraction of ambiguous-core points at each time step.
+    def _compute_ambiguity_schedule(self) -> np.ndarray:
+        """Fraction of "ambiguous" (randomly scattered) points per step."""
+        return np.linspace(0.9, 0.0, self.num_time_steps).astype(np.float32)
 
-        Returns:
-            ratios: (T,) float in [0, 1].  High early, low later.
-        """
-        T = self.num_time_steps
-        # Linear decay from ~0.9 to ~0.0
-        ratios = np.linspace(0.9, 0.0, T)
-        return ratios
+    # ------------------------------------------------------------------
+    # Episode generation
+    # ------------------------------------------------------------------
 
-    def _generate_sequence(self, shape_type: int):
-        """
-        Generate a single progressive-revelation sequence.
-
-        Returns:
-            points_sequence: list of T np.ndarray, each (n_t, 3)
-            full_points: (num_points_final, 3) — the complete shape
-            ambiguity_schedule: (T,) float — ambiguity at each step
-        """
-        T = self.num_time_steps
-        counts = self._compute_revelation_schedule()       # (T,)
-        amb_ratios = self._compute_ambiguity_ratio()        # (T,)
-
-        # Generate the full shape
+    def _generate_episode(self, shape_type: int) -> Dict:
+        """Generate a single episode."""
         gen = {0: self._generate_cube,
                1: self._generate_cylinder,
                2: self._generate_sphere}
-        full_points = gen[shape_type](self.num_points_final)
 
-        # Add noise to full shape
-        full_points = full_points + np.random.normal(0, self.noise_std,
-                                                     full_points.shape)
+        # 1. Target shape
+        target = gen[shape_type](self.num_points_final)
+        target += np.random.normal(0, self.noise_std, target.shape)
 
-        # Build the sequence
-        points_sequence: List[np.ndarray] = []
-        ambiguity_schedule = np.zeros(T, dtype=np.float32)
+        # 2. Initial scattered points (step 0)
+        n0 = int(self.revelation_counts[0])
+        n_hint = max(1, int(n0 * self.hint_ratio))
+        n_scatter = n0 - n_hint
 
-        for t in range(T):
-            n_t = int(counts[t])
-            n_amb = int(n_t * amb_ratios[t])   # ambiguous points
-            n_real = n_t - n_amb                # shape-specific points
+        # Scattered points: uniformly random inside a ball
+        r = self.scatter_radius * np.cbrt(np.random.uniform(0, 1, n_scatter))
+        theta = np.random.uniform(0, 2 * np.pi, n_scatter)
+        phi = np.arccos(2 * np.random.uniform(0, 1, n_scatter) - 1)
+        scattered = np.stack([r * np.sin(phi) * np.cos(theta),
+                              r * np.sin(phi) * np.sin(theta),
+                              r * np.cos(phi)], axis=1)
 
-            parts = []
-            if n_amb > 0:
-                parts.append(self._generate_ambiguous_core(n_amb))
-            if n_real > 0:
-                # Sample from the full shape (without replacement if possible)
-                idx = np.random.choice(self.num_points_final,
-                                       min(n_real, self.num_points_final),
-                                       replace=False)
-                parts.append(full_points[idx[:n_real]])
+        # Hint points: sampled from target surface + extra noise
+        hint_idx = np.random.choice(self.num_points_final, n_hint,
+                                    replace=False)
+        hints = target[hint_idx] + np.random.normal(
+            0, self.noise_std * 3, (n_hint, 3))
 
-            step_points = np.vstack(parts) if len(parts) > 1 else parts[0]
-            step_points = self._adjust_count(step_points, n_t)
+        initial = np.vstack([scattered, hints])
+        hint_mask = np.zeros(n0, dtype=bool)
+        hint_mask[n_scatter:] = True
 
-            # Add per-step noise
-            step_points = step_points + np.random.normal(
-                0, self.noise_std * (1 + amb_ratios[t]), step_points.shape)
+        # 3. Affordance labels
+        aff = np.zeros((self.num_points_final, self.NUM_AFFORDANCES),
+                       dtype=np.float32)
+        aff[:, self.SHAPE_AFFORDANCES[shape_type]] = 1.0
 
-            points_sequence.append(step_points)
-            ambiguity_schedule[t] = amb_ratios[t]
-
-        return points_sequence, full_points, ambiguity_schedule
-
-    # ------------------------------------------------------------------
-    # Affordance labels (same logic as SyntheticAffordanceDataset)
-    # ------------------------------------------------------------------
-
-    def _generate_affordance_labels(self, shape_type: int,
-                                    n: int) -> np.ndarray:
-        """Generate per-point affordance labels for n points."""
-        labels = np.zeros((n, self.NUM_AFFORDANCES), dtype=np.float32)
-        valid = self.SHAPE_AFFORDANCES[shape_type]
-        labels[:, valid] = 1.0
-        return labels
-
-    # ------------------------------------------------------------------
-    # Dataset construction
-    # ------------------------------------------------------------------
+        return {
+            'initial_points': torch.from_numpy(initial).float(),
+            'target_points': torch.from_numpy(target).float(),
+            'target_affordances': torch.from_numpy(aff).float(),
+            'shape_type': shape_type,
+            'hint_mask': torch.from_numpy(hint_mask),
+            'revelation_counts': torch.from_numpy(
+                self.revelation_counts.copy()).long(),
+            'ambiguity_schedule': torch.from_numpy(
+                self.ambiguity_ratios.copy()).float(),
+        }
 
     def _generate_all_samples(self) -> List[Dict]:
-        """Pre-generate all samples."""
         samples = []
         for _ in range(self.num_samples):
-            shape_type = int(np.random.choice(self.shape_types))
-            pts_seq, full_pts, amb_sched = self._generate_sequence(shape_type)
-
-            affordances = self._generate_affordance_labels(
-                shape_type, self.num_points_final)
-
-            samples.append({
-                'points_sequence': [
-                    torch.from_numpy(p).float() for p in pts_seq
-                ],
-                'points_final': torch.from_numpy(full_pts).float(),
-                'affordances': torch.from_numpy(affordances).float(),
-                'shape_type': shape_type,
-                'ambiguity_schedule': torch.from_numpy(amb_sched).float(),
-            })
+            st = int(np.random.choice(self.shape_types))
+            samples.append(self._generate_episode(st))
         return samples
 
     def __len__(self) -> int:
         return self.num_samples
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        """
-        Returns:
-            Dict with keys:
-                - points_sequence: list of T tensors (n_t, 3)
-                - points_final: (num_points_final, 3)
-                - affordances: (num_points_final, NUM_AFFORDANCES)
-                - shape_type: int
-                - ambiguity_schedule: (T,) float
-        """
+    def __getitem__(self, idx: int) -> Dict:
         return self.samples[idx]
 
 
 # ======================================================================
-# Collate function for DataLoader
+# Collate function
 # ======================================================================
 
 def collate_temporal_batch(batch: List[Dict]) -> Dict:
     """
-    Collate a batch of temporal sequences into graph-format tensors.
+    Collate a batch of episodes into tensors.
 
-    Because each time step may have a different number of points, we collate
-    each step independently into graph format (concatenated points + batch
-    index), following the project's tensor specification.
+    Because each sample has the same N_final and the same revelation
+    schedule, we can stack most tensors directly.  The initial points
+    are collated into graph format (concatenated + batch index) because
+    N_0 may vary slightly across samples due to rounding.
 
     Returns:
         Dict with:
-            - 'points_sequence': list of T dicts, each with
-                  'points' (N_t, 3) and 'batch' (N_t,)
-            - 'points_final': dict with 'points' (N_final, 3) and 'batch' (N_final,)
-            - 'affordances': (B, num_points_final, NUM_AFFORDANCES)
-            - 'shape_types': list of int
-            - 'ambiguity_schedule': (B, T)
+            'initial_points': (N_total_0, 3) concatenated
+            'initial_batch':  (N_total_0,) batch assignment
+            'hint_mask':      (N_total_0,) bool
+            'target_points':  (B, N_final, 3)
+            'target_affordances': (B, N_final, NUM_AFFORDANCES)
+            'shape_types':    list of int
+            'revelation_counts': (T,) int  (shared across batch)
+            'ambiguity_schedule': (B, T)
     """
     B = len(batch)
-    T = len(batch[0]['points_sequence'])
 
-    # Collate each time step into graph format
-    points_sequence = []
-    for t in range(T):
-        pts_list = []
-        batch_idx_list = []
-        for i, sample in enumerate(batch):
-            pts = sample['points_sequence'][t]          # (n_t_i, 3)
-            pts_list.append(pts)
-            batch_idx_list.append(
-                torch.full((pts.shape[0],), i, dtype=torch.long))
-        points_sequence.append({
-            'points': torch.cat(pts_list, dim=0),
-            'batch': torch.cat(batch_idx_list, dim=0),
-        })
+    # Initial points → graph format
+    init_pts, init_batch, hint_masks = [], [], []
+    for i, s in enumerate(batch):
+        pts = s['initial_points']
+        init_pts.append(pts)
+        init_batch.append(torch.full((pts.size(0),), i, dtype=torch.long))
+        hint_masks.append(s['hint_mask'])
 
-    # Collate final points
-    final_pts_list = []
-    final_batch_list = []
-    for i, sample in enumerate(batch):
-        pts = sample['points_final']
-        final_pts_list.append(pts)
-        final_batch_list.append(
-            torch.full((pts.shape[0],), i, dtype=torch.long))
-
-    points_final = {
-        'points': torch.cat(final_pts_list, dim=0),
-        'batch': torch.cat(final_batch_list, dim=0),
-    }
-
-    # Affordances: (B, num_points_final, NUM_AFFORDANCES)
-    affordances = torch.stack([s['affordances'] for s in batch], dim=0)
-
-    # Shape types
-    shape_types = [s['shape_type'] for s in batch]
-
-    # Ambiguity schedule: (B, T)
-    ambiguity_schedule = torch.stack(
-        [s['ambiguity_schedule'] for s in batch], dim=0)
+    # Target points (all same N_final → stackable)
+    target_pts = torch.stack([s['target_points'] for s in batch])
+    target_aff = torch.stack([s['target_affordances'] for s in batch])
 
     return {
-        'points_sequence': points_sequence,
-        'points_final': points_final,
-        'affordances': affordances,
-        'shape_types': shape_types,
-        'ambiguity_schedule': ambiguity_schedule,
+        'initial_points': torch.cat(init_pts, dim=0),
+        'initial_batch': torch.cat(init_batch, dim=0),
+        'hint_mask': torch.cat(hint_masks, dim=0),
+        'target_points': target_pts,
+        'target_affordances': target_aff,
+        'shape_types': [s['shape_type'] for s in batch],
+        'revelation_counts': batch[0]['revelation_counts'],  # shared
+        'ambiguity_schedule': torch.stack(
+            [s['ambiguity_schedule'] for s in batch]),
     }
 
 
@@ -399,40 +302,33 @@ def collate_temporal_batch(batch: List[Dict]) -> Dict:
 # ======================================================================
 
 if __name__ == '__main__':
-    print("Testing TemporalShapeDataset...")
-
-    dataset = TemporalShapeDataset(
-        num_samples=10,
-        num_points_final=512,
-        num_time_steps=8,
-        seed=42
-    )
-    print(f"Dataset size: {len(dataset)}")
-
-    sample = dataset[0]
-    print(f"\nSample keys: {list(sample.keys())}")
-    print(f"Shape type: {sample['shape_type']} "
-          f"({TemporalShapeDataset.SHAPE_NAMES[sample['shape_type']]})")
-    print(f"Time steps: {len(sample['points_sequence'])}")
-    for t, pts in enumerate(sample['points_sequence']):
-        print(f"  Step {t}: {pts.shape[0]} points, "
-              f"ambiguity={sample['ambiguity_schedule'][t]:.2f}")
-    print(f"Final points: {sample['points_final'].shape}")
-    print(f"Affordances: {sample['affordances'].shape}")
-
-    # Test collate function
     from torch.utils.data import DataLoader
 
-    loader = DataLoader(dataset, batch_size=4,
-                        collate_fn=collate_temporal_batch)
-    batch = next(iter(loader))
-    print(f"\nBatch keys: {list(batch.keys())}")
-    print(f"Time steps in batch: {len(batch['points_sequence'])}")
-    for t, step in enumerate(batch['points_sequence']):
-        print(f"  Step {t}: points {step['points'].shape}, "
-              f"batch {step['batch'].shape}")
-    print(f"Final points: {batch['points_final']['points'].shape}")
-    print(f"Affordances: {batch['affordances'].shape}")
-    print(f"Ambiguity schedule: {batch['ambiguity_schedule'].shape}")
+    print("Testing TemporalShapeDataset (active assembly)...")
 
-    print("\nTemporalShapeDataset test passed!")
+    ds = TemporalShapeDataset(num_samples=10, num_points_final=256,
+                              num_time_steps=8, seed=42)
+    print(f"Dataset size: {len(ds)}")
+
+    s = ds[0]
+    print(f"\nSample keys: {list(s.keys())}")
+    print(f"Shape type: {s['shape_type']} "
+          f"({TemporalShapeDataset.SHAPE_NAMES[s['shape_type']]})")
+    print(f"Initial points: {s['initial_points'].shape}")
+    print(f"  hints: {s['hint_mask'].sum().item()} / "
+          f"{s['initial_points'].size(0)}")
+    print(f"Target points:  {s['target_points'].shape}")
+    print(f"Revelation counts: {s['revelation_counts'].tolist()}")
+    print(f"Ambiguity schedule: "
+          f"{[f'{v:.2f}' for v in s['ambiguity_schedule'].tolist()]}")
+
+    loader = DataLoader(ds, batch_size=4,
+                        collate_fn=collate_temporal_batch)
+    b = next(iter(loader))
+    print(f"\nBatch keys: {list(b.keys())}")
+    print(f"Initial points: {b['initial_points'].shape}, "
+          f"batch: {b['initial_batch'].shape}")
+    print(f"Target points:  {b['target_points'].shape}")
+    print(f"Ambiguity schedule: {b['ambiguity_schedule'].shape}")
+
+    print("\nTemporalShapeDataset (active assembly) test passed!")

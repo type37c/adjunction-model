@@ -1,194 +1,207 @@
 """
-Integration test for the temporal suspension experiment.
+Integration tests for the Temporal Suspension Experiment (Active Assembly).
 
-Validates:
-1. All imports resolve correctly
-2. TemporalShapeDataset generates valid data
-3. AdjunctionModel forward pass works with temporal data
-4. ConfidenceGate and ShapeClassifier produce correct shapes
-5. TemporalSuspensionTrainer can run one training step
+Tests:
+    1. TemporalShapeDataset generates valid episodes
+    2. collate_temporal_batch produces correct graph-format tensors
+    3. DisplacementHead forward pass (context + affordances → displacement)
+    4. chamfer_distance_graph computes valid distances
+    5. Full model forward pass through one time step (_step)
+    6. One training step (slack mode) runs without error
+    7. One training step (tight mode) runs without error
+
+These tests follow the project guideline:
+    "Early integration tests (forward pass tests) catch 90% of shape bugs."
 """
 
 import sys
 sys.path.append('/home/ubuntu/adjunction-model')
 
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 
+from src.models.adjunction_model import AdjunctionModel
 from src.data.temporal_dataset import (
     TemporalShapeDataset,
     collate_temporal_batch,
 )
-from src.models.adjunction_model import AdjunctionModel
 from experiments.temporal_suspension_experiment import (
-    ConfidenceGate,
-    ShapeClassifier,
+    DisplacementHead,
     TemporalSuspensionTrainer,
+    chamfer_distance_graph,
 )
 
 
 def test_dataset():
-    """Test dataset generation and collation."""
-    print("1. Testing TemporalShapeDataset...")
-    ds = TemporalShapeDataset(num_samples=8, num_points_final=256,
-                              num_time_steps=6, seed=0)
-    assert len(ds) == 8
-    sample = ds[0]
-    assert len(sample['points_sequence']) == 6
-    assert sample['points_final'].shape == (256, 3)
-    assert sample['affordances'].shape == (256, 5)
-    assert sample['ambiguity_schedule'].shape == (6,)
+    """Test 1: Dataset generates valid episodes."""
+    print("1. Testing TemporalShapeDataset ... ", end="")
+    ds = TemporalShapeDataset(num_samples=5, num_points_final=64,
+                              num_time_steps=4, seed=0)
+    assert len(ds) == 5
+    s = ds[0]
+    assert s['initial_points'].dim() == 2
+    assert s['initial_points'].size(1) == 3
+    assert s['target_points'].shape == (64, 3)
+    assert s['target_affordances'].shape == (64, 5)
+    assert s['hint_mask'].shape[0] == s['initial_points'].size(0)
+    assert s['revelation_counts'].size(0) == 4
+    assert s['ambiguity_schedule'].size(0) == 4
+    print("PASSED")
 
+
+def test_collate():
+    """Test 2: Collate function produces correct shapes."""
+    print("2. Testing collate_temporal_batch ... ", end="")
+    ds = TemporalShapeDataset(num_samples=8, num_points_final=64,
+                              num_time_steps=4, seed=0)
     loader = DataLoader(ds, batch_size=4, collate_fn=collate_temporal_batch)
     batch = next(iter(loader))
-    assert len(batch['points_sequence']) == 6
-    assert batch['affordances'].shape == (4, 256, 5)
-    assert batch['ambiguity_schedule'].shape == (4, 6)
-    print("   PASSED")
+
+    assert batch['initial_points'].dim() == 2
+    assert batch['initial_points'].size(1) == 3
+    assert batch['initial_batch'].dim() == 1
+    assert batch['target_points'].shape == (4, 64, 3)
+    assert batch['target_affordances'].shape == (4, 64, 5)
+    assert batch['hint_mask'].dim() == 1
+    assert batch['revelation_counts'].size(0) == 4
+    assert batch['ambiguity_schedule'].shape == (4, 4)
+    print("PASSED")
 
 
-def test_model_forward():
-    """Test AdjunctionModel forward pass with temporal data."""
-    print("2. Testing AdjunctionModel forward pass...")
+def test_displacement_head():
+    """Test 3: DisplacementHead forward pass."""
+    print("3. Testing DisplacementHead ... ", end="")
+    head = DisplacementHead(context_dim=64, num_affordances=5)
+    B, N = 2, 20
+    context = torch.randn(B, 64)
+    aff = torch.randn(N, 5)
+    batch_idx = torch.cat([torch.zeros(10, dtype=torch.long),
+                           torch.ones(10, dtype=torch.long)])
+    disp = head(context, aff, batch_idx)
+    assert disp.shape == (N, 3), f"Expected ({N}, 3), got {disp.shape}"
+    print("PASSED")
+
+
+def test_chamfer_distance():
+    """Test 4: chamfer_distance_graph computes valid distances."""
+    print("4. Testing chamfer_distance_graph ... ", end="")
+    B, N, M = 2, 15, 20
+    assembled = torch.randn(N, 3)
+    target = torch.randn(B, M, 3)
+    batch_idx = torch.cat([torch.zeros(8, dtype=torch.long),
+                           torch.ones(7, dtype=torch.long)])
+    cd_per, cd_mean = chamfer_distance_graph(assembled, target, batch_idx, B)
+    assert cd_per.shape == (B,)
+    assert cd_mean.dim() == 0
+    assert cd_mean.item() >= 0
+    # Identical clouds should have zero CD
+    pts = torch.randn(10, 3)
+    target_id = pts.unsqueeze(0)  # (1, 10, 3)
+    batch_id = torch.zeros(10, dtype=torch.long)
+    _, cd_zero = chamfer_distance_graph(pts, target_id, batch_id, 1)
+    assert cd_zero.item() < 1e-5, f"Expected ~0, got {cd_zero.item()}"
+    print("PASSED")
+
+
+def _make_model_and_trainer(mode='slack'):
+    """Helper: create small model + trainer for testing."""
     model = AdjunctionModel(
-        num_affordances=5, num_points=256, f_hidden_dim=64,
-        g_hidden_dim=128, agent_hidden_dim=256, agent_latent_dim=64,
-        context_dim=128, valence_dim=32, valence_decay=0.1,
-        alpha_curiosity=0.0, beta_competence=0.6, gamma_novelty=0.4,
+        num_affordances=5,
+        num_points=64,
+        f_hidden_dim=32,
+        g_hidden_dim=64,
+        agent_hidden_dim=128,
+        agent_latent_dim=32,
+        context_dim=64,
+        valence_dim=16,
+        valence_decay=0.1,
+        alpha_curiosity=0.0,
+        beta_competence=0.6,
+        gamma_novelty=0.4,
     )
-    model.eval()
-
-    ds = TemporalShapeDataset(num_samples=4, num_points_final=256,
-                              num_time_steps=4, seed=0)
-    loader = DataLoader(ds, batch_size=2, collate_fn=collate_temporal_batch)
-    batch = next(iter(loader))
-
-    B = 2
-    state = model.initial_state(B, torch.device('cpu'))
-    coh = torch.zeros(B, 1)
-
-    for t in range(4):
-        pos = batch['points_sequence'][t]['points']
-        bidx = batch['points_sequence'][t]['batch']
-        N = pos.size(0)
-        coh_spatial = torch.zeros(N)
-
-        # Remove stale per-point tensors whose length matches the
-        # *previous* step's N (same fix as TemporalSuspensionTrainer._step)
-        state_clean = {k: v for k, v in state.items()
-                       if k not in ('priority_normalized',)}
-
-        with torch.no_grad():
-            results = model(pos, bidx, state_clean, coh, coh_spatial)
-
-        assert results['affordances'].shape[0] == N
-        assert results['affordances'].shape[1] == 5
-        assert results['coherence_signal'].shape == (B, 1)
-        assert results['counit_signal'].shape == (B, 1)
-        assert results['context'].shape == (B, 128)
-
-        state = results['agent_state']
-        coh = results['coherence_signal']
-        coh_spatial = results['coherence_spatial']
-
-    print("   PASSED")
-
-
-def test_confidence_gate():
-    """Test ConfidenceGate shape."""
-    print("3. Testing ConfidenceGate...")
-    gate = ConfidenceGate(context_dim=128)
-    ctx = torch.randn(4, 128)
-    out = gate(ctx)
-    assert out.shape == (4, 1)
-    assert (out >= 0).all() and (out <= 1).all()
-    print("   PASSED")
-
-
-def test_classifier():
-    """Test ShapeClassifier shape."""
-    print("4. Testing ShapeClassifier...")
-    clf = ShapeClassifier(num_affordances=5, num_classes=3)
-    aff = torch.randn(4, 5)
-    logits = clf(aff)
-    assert logits.shape == (4, 3)
-    print("   PASSED")
-
-
-def test_trainer_one_step():
-    """Test that the trainer can run one training step without error."""
-    print("5. Testing TemporalSuspensionTrainer (1 epoch)...")
-    model = AdjunctionModel(
-        num_affordances=5, num_points=256, f_hidden_dim=64,
-        g_hidden_dim=128, agent_hidden_dim=256, agent_latent_dim=64,
-        context_dim=128, valence_dim=32, valence_decay=0.1,
-        alpha_curiosity=0.0, beta_competence=0.6, gamma_novelty=0.4,
-    )
-    gate = ConfidenceGate(context_dim=128)
-    clf = ShapeClassifier(num_affordances=5, num_classes=3)
-
+    head = DisplacementHead(context_dim=64, num_affordances=5)
     trainer = TemporalSuspensionTrainer(
-        model=model, confidence_gate=gate, classifier=clf,
-        device=torch.device('cpu'), lr=1e-3,
-        confidence_threshold=0.5, mode='slack',
+        model=model,
+        displacement_head=head,
+        device=torch.device('cpu'),
+        lr=1e-3,
+        mode=mode,
     )
+    return trainer
 
-    ds = TemporalShapeDataset(num_samples=8, num_points_final=256,
+
+def test_single_step():
+    """Test 5: Full model forward pass through one time step."""
+    print("5. Testing single-step forward pass ... ", end="")
+    trainer = _make_model_and_trainer('slack')
+    B = 2
+    N = 20
+    pos = torch.randn(N, 3)
+    batch_idx = torch.cat([torch.zeros(10, dtype=torch.long),
+                           torch.ones(10, dtype=torch.long)])
+    agent_state = trainer.model.initial_state(B, torch.device('cpu'))
+    coherence_prev = torch.zeros(B, 1)
+
+    out = trainer._step(pos, batch_idx, agent_state, coherence_prev, None)
+    assert out['displacement'].shape == (N, 3)
+    assert out['eta'].shape == (B, 1)
+    assert out['eps'].shape == (B, 1)
+    assert out['aff_batched'].shape == (B, 5)
+    print("PASSED")
+
+
+def test_train_step_slack():
+    """Test 6: One training step (slack mode)."""
+    print("6. Testing training step (slack) ... ", end="")
+    trainer = _make_model_and_trainer('slack')
+    ds = TemporalShapeDataset(num_samples=8, num_points_final=64,
                               num_time_steps=4, seed=0)
     loader = DataLoader(ds, batch_size=4, collate_fn=collate_temporal_batch)
 
     metrics = trainer.train_epoch(loader, epoch=0)
     assert 'loss' in metrics
-    assert 'accuracy' in metrics
-    assert 'eta_by_step' in metrics
-    assert isinstance(metrics['eta_by_step'], dict)
-    print(f"   Loss={metrics['loss']:.4f}, Acc={metrics['accuracy']:.2f}")
-    print("   PASSED")
+    assert 'chamfer' in metrics
+    assert 'disp_mag_by_step' in metrics
+    assert 'cd_by_step' in metrics
+    assert metrics['loss'] > 0
+    print("PASSED")
 
 
-def test_trainer_tight_mode():
-    """Test tight mode (with reconstruction loss)."""
-    print("6. Testing TemporalSuspensionTrainer tight mode...")
-    model = AdjunctionModel(
-        num_affordances=5, num_points=256, f_hidden_dim=64,
-        g_hidden_dim=128, agent_hidden_dim=256, agent_latent_dim=64,
-        context_dim=128, valence_dim=32, valence_decay=0.1,
-        alpha_curiosity=0.0, beta_competence=0.6, gamma_novelty=0.4,
-    )
-    gate = ConfidenceGate(context_dim=128)
-    clf = ShapeClassifier(num_affordances=5, num_classes=3)
-
-    trainer = TemporalSuspensionTrainer(
-        model=model, confidence_gate=gate, classifier=clf,
-        device=torch.device('cpu'), lr=1e-3,
-        confidence_threshold=0.5, mode='tight',
-        lambda_recon=1.0,
-    )
-
-    ds = TemporalShapeDataset(num_samples=8, num_points_final=256,
+def test_train_step_tight():
+    """Test 7: One training step (tight mode)."""
+    print("7. Testing training step (tight) ... ", end="")
+    trainer = _make_model_and_trainer('tight')
+    ds = TemporalShapeDataset(num_samples=8, num_points_final=64,
                               num_time_steps=4, seed=0)
     loader = DataLoader(ds, batch_size=4, collate_fn=collate_temporal_batch)
 
     metrics = trainer.train_epoch(loader, epoch=0)
-    assert metrics['recon'] > 0, "Tight mode should have non-zero recon loss"
-    print(f"   Loss={metrics['loss']:.4f}, Recon={metrics['recon']:.4f}")
-    print("   PASSED")
+    assert 'loss' in metrics
+    assert 'recon' in metrics
+    assert metrics['loss'] > 0
+    print("PASSED")
 
+
+# ======================================================================
+# Main
+# ======================================================================
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("Temporal Suspension Integration Tests")
+    print("Temporal Suspension — Integration Tests (Active Assembly)")
     print("=" * 60)
     print()
 
     test_dataset()
-    test_model_forward()
-    test_confidence_gate()
-    test_classifier()
-    test_trainer_one_step()
-    test_trainer_tight_mode()
+    test_collate()
+    test_displacement_head()
+    test_chamfer_distance()
+    test_single_step()
+    test_train_step_slack()
+    test_train_step_tight()
 
     print()
     print("=" * 60)
-    print("ALL TESTS PASSED")
+    print("All 7 tests PASSED!")
     print("=" * 60)
