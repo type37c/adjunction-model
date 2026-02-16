@@ -33,7 +33,7 @@ sys.path.insert(0, str(project_root))
 from src.models.adjunction_model import AdjunctionModel
 from src.models.value_function import ValueFunction
 from src.training.train_agent_value_based import ValueBasedAgentTrainer
-from src.data.shape_dataset import ShapeDataset
+from src.data.synthetic_dataset import SyntheticAffordanceDataset
 
 
 def load_config():
@@ -166,10 +166,19 @@ def main():
     
     # Create dataset
     print("\nCreating dataset...")
-    dataset = ShapeDataset(
+    
+    # Convert shape_types from string names to indices
+    shape_name_to_idx = {'cube': 0, 'cylinder': 1, 'sphere': 2}
+    shape_types_config = config['data']['shape_types']
+    if isinstance(shape_types_config[0], str):
+        shape_types = [shape_name_to_idx[name] for name in shape_types_config]
+    else:
+        shape_types = shape_types_config
+    
+    dataset = SyntheticAffordanceDataset(
         num_samples=config['data']['num_samples'],
         num_points=config['model']['num_points'],
-        shape_types=config['data']['shape_types']
+        shape_types=shape_types
     )
     
     dataloader = DataLoader(
