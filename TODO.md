@@ -16,9 +16,24 @@ Following the 2026-02-16 discussion and dev_instructions.pdf, experiments have b
 
 ---
 
-## Current Priority: Intrinsic Reward Baseline Experiment
+## Current Priority: Documentation Sync & Experiment Execution
 
-### **Intrinsic Reward Baseline - IMPLEMENTED ✓ (2026-02-16)**
+### **Documentation Overhaul - COMPLETED ✓ (2026-02-17)**
+
+**Goal**: Synchronize all major documentation (README, ARCHITECTURE) with the latest theoretical insights and the value-based RL implementation.
+
+**Status**: ✅ Completed
+
+**Implementation**:
+- [x] Update `README.md` to reflect the new experiment structure and prioritize the Intrinsic Reward Baseline.
+- [x] Overhaul `ARCHITECTURE.md` to `v2.1`, detailing the value-based training cycle (Trajectory Collection, TD Learning, Agent C Update) and its theoretical justification based on `priority_and_valence_reconsidered.md`.
+- [x] Verify all documentation is consistent with `AGENT_GUIDELINES.md`.
+
+---
+
+## Intrinsic Reward Baseline Experiment
+
+### **Intrinsic Reward Baseline - READY FOR EXECUTION**
 
 **Goal**: Reproduce the 2/13 experiment in a clean codebase to verify that intrinsic motivation alone (without external objectives) can drive structure formation.
 
@@ -159,12 +174,10 @@ See "Current Priority" section above.
 - **Priority shift**: Focus on intrinsic reward experiments as the unique contribution of this project
 
 ### Next Session Goals
-1. **Run intrinsic_reward_baseline experiment** (100 epochs, ~2-3 hours)
-2. **Analyze and compare with 2/13 results**
-3. **Document findings** and update theory documents
-4. **Decide next steps** based on results:
-   - If successful: Implement intrinsic_reward_curiosity
-   - If unsuccessful: Debug and iterate
+1. **PUSH DOCUMENTATION CHANGES** to the remote repository.
+2. **Run intrinsic_reward_baseline experiment** (100 epochs, ~2-3 hours).
+3. **Analyze and compare with 2/13 results**.
+4. **Document findings** and update theory documents.
 
 ---
 
