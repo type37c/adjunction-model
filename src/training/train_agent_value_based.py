@@ -56,7 +56,8 @@ class ValueBasedAgentTrainer:
         gamma: float = 0.99,
         episode_length: int = 5,
         value_update_freq: int = 1,  # Update value every N steps
-        agent_update_freq: int = 1   # Update agent every N steps
+        agent_update_freq: int = 1,   # Update agent every N steps
+        reward_scale: float = 1.0     # Scale intrinsic rewards
     ):
         """
         Args:
@@ -79,6 +80,7 @@ class ValueBasedAgentTrainer:
         self.episode_length = episode_length
         self.value_update_freq = value_update_freq
         self.agent_update_freq = agent_update_freq
+        self.reward_scale = reward_scale
         
         # Optimizers
         # Check if model has 'agent' or 'agent_c' attribute
@@ -182,10 +184,11 @@ class ValueBasedAgentTrainer:
             # Compute value
             value = self.value_function(results['agent_state'])
             
-            # Store trajectory
+            # Store trajectory (with scaled reward)
+            scaled_reward = (R_intrinsic.item() if isinstance(R_intrinsic, torch.Tensor) else R_intrinsic) * self.reward_scale
             trajectory.append({
                 'state': {k: v.clone() for k, v in results['agent_state'].items()},
-                'reward': R_intrinsic.item() if isinstance(R_intrinsic, torch.Tensor) else R_intrinsic,
+                'reward': scaled_reward,
                 'value': value.mean().item(),
                 'coherence': results['coherence_signal'].mean().item(),
                 'uncertainty': agent_info.get('uncertainty', torch.tensor(0.0)).item(),

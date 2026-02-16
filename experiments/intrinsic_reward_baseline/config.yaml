@@ -31,8 +31,9 @@ training:
   batch_size: 4
   episode_length: 5      # Number of steps per episode (2/13)
   agent_lr: 0.0001       # Agent C learning rate
-  value_lr: 0.001        # Value function learning rate
-  gamma: 0.99            # Discount factor for TD learning
+  value_lr: 0.0001       # Value function learning rate (reduced from 0.001 to prevent explosion)
+  gamma: 0.95            # Discount factor for TD learning (reduced from 0.99 for stability)
+  reward_scale: 0.1      # Scale intrinsic rewards to prevent value explosion
   log_interval: 5
   save_interval: 10
   

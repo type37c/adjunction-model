@@ -225,6 +225,8 @@ class AdjunctionModel(nn.Module):
             'coherence_signal': coherence_signal,         # (B, 1) scalar - Unit η
             'coherence_spatial': coherence_spatial,       # (N,) per-point
             'counit_signal': counit_signal,               # (B, 1) scalar - Counit ε
+            'eta': coherence_signal.mean(),               # Scalar η (Shape Slack)
+            'epsilon': counit_signal.mean(),              # Scalar ε (Affordance Slack)
             'agent_state': agent_state_new,
             'context': context,
             'rssm_info': agent_info,

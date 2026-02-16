@@ -93,7 +93,8 @@ def create_trainer(model, value_fn, config, device):
         gamma=config['training']['gamma'],
         episode_length=config['training']['episode_length'],
         value_update_freq=1,
-        agent_update_freq=1
+        agent_update_freq=1,
+        reward_scale=config['training'].get('reward_scale', 1.0)
     )
     
     return trainer
