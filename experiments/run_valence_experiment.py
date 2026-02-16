@@ -37,9 +37,10 @@ def run_condition_1(output_dir: Path, num_epochs: int = 50):
     
     # Create model with alpha_curiosity=0.0 (no valence updates)
     model = AdjunctionModel(
-        in_channels=3,
-        hidden_channels=64,
-        out_channels=5,
+        num_affordances=5,
+        num_points=256,
+        f_hidden_dim=64,
+        g_hidden_dim=128,
         agent_hidden_dim=256,
         agent_latent_dim=64,
         context_dim=128,
@@ -178,9 +179,10 @@ def run_condition_3(output_dir: Path, num_epochs: int = 50):
     
     # Create model with alpha_curiosity=1.0 (enable valence updates)
     model = AdjunctionModel(
-        in_channels=3,
-        hidden_channels=64,
-        out_channels=5,
+        num_affordances=5,
+        num_points=256,
+        f_hidden_dim=64,
+        g_hidden_dim=128,
         agent_hidden_dim=256,
         agent_latent_dim=64,
         context_dim=128,

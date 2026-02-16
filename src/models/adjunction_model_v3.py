@@ -100,6 +100,55 @@ class AdjunctionModelV3(nn.Module):
         """Initialize agent state."""
         return self.agent_c.initial_state(batch_size, device)
     
+    def _compute_coherence_chamfer(
+        self,
+        original: torch.Tensor,
+        reconstructed: torch.Tensor,
+        batch: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute Chamfer Distance for coherence signal.
+        
+        Args:
+            original: (N, 3) original point cloud
+            reconstructed: (N, 3) reconstructed point cloud
+            batch: (N,) batch assignment
+        
+        Returns:
+            coherence_scalar: (B, 1) average Chamfer distance per sample
+            coherence_spatial: (N,) per-point distance to nearest reconstructed point
+        """
+        device = original.device
+        batch_size = batch.max().item() + 1
+        
+        coherence_scalar = torch.zeros(batch_size, 1, device=device)
+        coherence_spatial = torch.zeros(original.size(0), device=device)
+        
+        for b in range(batch_size):
+            mask = (batch == b)
+            if mask.sum() == 0:
+                continue
+            
+            orig_b = original[mask]  # (N_b, 3)
+            recon_b = reconstructed[mask]  # (N_b, 3)
+            
+            # Pairwise distances
+            dist = torch.cdist(orig_b.unsqueeze(0), recon_b.unsqueeze(0)).squeeze(0)  # (N_b, N_b)
+            
+            # Forward: original -> reconstructed
+            dist_forward, _ = dist.min(dim=1)  # (N_b,)
+            
+            # Backward: reconstructed -> original
+            dist_backward, _ = dist.min(dim=0)  # (N_b,)
+            
+            # Chamfer distance (scalar)
+            coherence_scalar[b] = (dist_forward.mean() + dist_backward.mean()) / 2
+            
+            # Spatial coherence (per-point)
+            coherence_spatial[mask] = dist_forward
+        
+        return coherence_scalar, coherence_spatial
+    
     def forward(
         self,
         pos: torch.Tensor,
@@ -170,16 +219,11 @@ class AdjunctionModelV3(nn.Module):
         # Step 3: Apply G (Affordance → Shape) with context
         reconstructed_pos = self.G(affordances, batch, context)
         
-        # Step 4: Compute coherence signals
-        # Unit η: ||pos - G(F(pos))||
-        coherence_spatial = torch.norm(pos - reconstructed_pos, dim=-1)  # (N,)
-        
-        # Aggregate to scalar per sample
-        coherence_signal = torch.zeros(batch_size, 1, device=device)
-        for b in range(batch_size):
-            mask = (batch == b)
-            if mask.sum() > 0:
-                coherence_signal[b] = coherence_spatial[mask].mean()
+        # Step 4: Compute coherence signals using Chamfer Distance
+        # Unit η: Chamfer(pos, G(F(pos)))
+        coherence_signal, coherence_spatial = self._compute_coherence_chamfer(
+            pos, reconstructed_pos, batch
+        )
         
         # Step 5: Compute counit ε: ||affordances - F(G(affordances))||
         reconstructed_affordances, _ = self.F(reconstructed_pos, batch, context)
