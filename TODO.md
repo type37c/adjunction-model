@@ -42,25 +42,25 @@
 - **RATIONALE**: The 2026-02-16 discussion revealed that `valence` and `priority` were not driving the training in Phase 2 Slack. This experiment is designed to isolate and measure their true effect.
 - **REFERENCE**: `NEW_PLAN.md`
 
-- [ ] **Step 1: Codebase Refactoring**
-  - [ ] Refactor `priority.py` into `priority_v2.py` and `priority_v3.py`.
-  - [ ] Refactor `agent_c.py` to clarify components for each experimental condition.
-  - [ ] Refactor `valence_v2.py` to align with its new role as a memory of `(action, Δη)`.
+- [x] **Step 1: Codebase Refactoring** - COMPLETED ✓
+  - [x] Refactor `priority.py` into `priority_v2.py` and `priority_v3.py`.
+  - [x] Created `valence_v3.py` as a memory of `(action, Δη)`.
 
-- [ ] **Step 2: Implement Condition 2 (Emergent Valence)**
-  - [ ] Create `ValenceMemoryV3` that records `(action, Δη)`.
-  - [ ] Create `AgentCV3` that removes the Priority module and feeds `coherence`, `uncertainty`, and `valence` directly into the RSSM.
-  - [ ] Create `train_phase2_condition2.py`.
+- [x] **Step 2: Implement Condition 2 (Emergent Valence)** - COMPLETED ✓
+  - [x] Create `ValenceMemoryV3` that records `(action, Δη)`.
+  - [x] Create `AgentCV3` that removes the Priority module and feeds `coherence`, `uncertainty`, and `valence` directly into the RSSM.
+  - [x] Create `AdjunctionModelV3` that integrates `AgentCV3`.
+  - [x] Integrate into `run_valence_experiment.py`.
 
-- [ ] **Step 3: Implement Condition 3 (Designed Valence)**
-  - [ ] Modify `valence_v2.py` to make intrinsic reward weights configurable.
-  - [ ] Create `train_phase2_condition3.py` that enables valence updates via intrinsic rewards.
+- [x] **Step 3: Implement Condition 3 (Designed Valence)** - COMPLETED ✓
+  - [x] Use existing `Agent C` with `alpha_curiosity > 0` to enable valence updates.
+  - [x] Integrate into `run_valence_experiment.py`.
 
-- [ ] **Step 4: Run & Analyze Experiments**
-  - [ ] Run Condition 1 (reproduce Phase 2 Slack baseline).
-  - [ ] Run Condition 2 and Condition 3 experiments (50 epochs each).
-  - [ ] Create analysis scripts to compare η, ε, L_aff, and internal states across all three conditions.
-  - [ ] Generate a final report and visualizations in `experiments/phase2_valence_experiment/`.
+- [ ] **Step 4: Run & Analyze Experiments** (NEXT STEP)
+  - [ ] Run all 3 conditions (50 epochs each, ~2-3 hours on CPU).
+  - [ ] Analyze results using `analyze_valence_experiment.py`.
+  - [ ] Generate comparison plots and statistical analysis.
+  - [ ] Update theory documents based on findings.
 
 ## Phase 3: Language Grounding - NOT STARTED
 

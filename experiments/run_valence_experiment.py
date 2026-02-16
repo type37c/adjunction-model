@@ -102,18 +102,68 @@ def run_condition_2(output_dir: Path, num_epochs: int = 50):
     print("CONDITION 2: Emergent Valence (AgentCV3)")
     print("="*60)
     
-    print("NOTE: This condition requires AgentCV3 integration into AdjunctionModel.")
-    print("      Implementation placeholder - to be completed.")
+    device = torch.device('cpu')
     
-    # TODO: Create AdjunctionModelV3 that uses AgentCV3
-    # TODO: Run training with AgentCV3
-    # TODO: Save results
+    # Import AdjunctionModelV3
+    from src.models.adjunction_model_v3 import AdjunctionModelV3
     
+    # Create model with AgentCV3
+    model = AdjunctionModelV3(
+        num_affordances=5,
+        num_points=256,
+        f_hidden_dim=64,
+        g_hidden_dim=128,
+        agent_hidden_dim=256,
+        agent_latent_dim=64,
+        context_dim=128,
+        valence_dim=32,
+        valence_decay=0.1,
+        valence_learning_rate=0.1
+    )
+    
+    # Create dataset
+    dataset = SyntheticAffordanceDataset(
+        num_samples=100,
+        num_points=256,
+        shape_types=['sphere', 'cube', 'cylinder']
+    )
+    
+    dataloader = DataLoader(
+        dataset,
+        batch_size=8,
+        shuffle=True,
+        collate_fn=dataset.collate_fn
+    )
+    
+    # Create trainer
+    trainer = Phase2SlackTrainer(
+        model=model,
+        device=device,
+        lr=1e-4,
+        lambda_aff=1.0,
+        lambda_kl=0.1,
+        lambda_coherence=0.1
+    )
+    
+    # Train
+    results = []
+    for epoch in range(num_epochs):
+        metrics = trainer.train_epoch(dataloader, epoch)
+        results.append(metrics)
+        
+        if epoch % 10 == 0:
+            print(f"Epoch {epoch}: L_aff={metrics['aff_loss']:.4f}, "
+                  f"η={metrics['unit_mean']:.4f}, ε={metrics['counit_mean']:.4f}")
+    
+    # Save results
     output_dir.mkdir(parents=True, exist_ok=True)
-    with open(output_dir / 'status.txt', 'w') as f:
-        f.write("Condition 2: Implementation pending\n")
+    with open(output_dir / 'results.json', 'w') as f:
+        json.dump(results, f, indent=2)
     
-    return []
+    torch.save(model.state_dict(), output_dir / 'model_final.pt')
+    
+    print(f"\nCondition 2 complete. Results saved to {output_dir}")
+    return results
 
 
 def run_condition_3(output_dir: Path, num_epochs: int = 50):

@@ -75,17 +75,22 @@ This will:
 ## Implementation Status
 
 - [x] Condition 1: Implemented and ready
-- [ ] Condition 2: Requires `AdjunctionModelV3` integration (pending)
+- [x] Condition 2: Implemented and ready (`AdjunctionModelV3` integrated)
 - [x] Condition 3: Implemented and ready
 - [x] Analysis script: Complete
 - [x] Documentation: Complete
 
 ## Next Steps
 
-1. **Complete Condition 2**: Integrate `AgentCV3` into `AdjunctionModel`
-2. **Run experiments**: Execute all conditions (estimated 2-3 hours on CPU)
-3. **Analyze results**: Compare conditions and draw conclusions
-4. **Update theory docs**: Revise `priority_and_valence_reconsidered.md` based on findings
+1. **Run experiments**: Execute all conditions (estimated 2-3 hours on CPU)
+   ```bash
+   python experiments/run_valence_experiment.py
+   ```
+2. **Analyze results**: Compare conditions and draw conclusions
+   ```bash
+   python experiments/analyze_valence_experiment.py
+   ```
+3. **Update theory docs**: Revise `priority_and_valence_reconsidered.md` based on findings
 
 ## File Structure
 

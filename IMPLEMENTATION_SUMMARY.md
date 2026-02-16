@@ -80,34 +80,26 @@ Phase 2 Slackの安定した枠組みをベースとし、変数を1つ（valenc
 - [x] Priority v2/v3のリファクタリング
 - [x] ValenceMemoryV3の実装
 - [x] AgentCV3の実装
+- [x] AdjunctionModelV3の実装
+- [x] Condition 2の統合
 - [x] 実験スクリプトの作成
 - [x] 分析スクリプトの作成
 - [x] ドキュメントの整備
 
 ### Pending ⏳
 
-- [ ] **Condition 2の統合**: `AdjunctionModelV3`の作成が必要
-  - `AdjunctionModel`を継承し、`AgentC`の代わりに`AgentCV3`を使用
-  - `conditional_adjunction.py`の対応する変更
 - [ ] **実験の実行**: 3条件×50エポック（CPU で 2-3時間）
 - [ ] **結果の分析**: 比較グラフと統計分析
 - [ ] **理論文書の更新**: 実験結果に基づく改訂
 
 ## Next Steps
 
-### Immediate (Day 1)
+### Immediate
 
-1. **AdjunctionModelV3の実装**
-   ```python
-   # src/models/adjunction_model_v3.py
-   class AdjunctionModelV3(AdjunctionModel):
-       def __init__(self, ...):
-           # Use AgentCV3 instead of AgentC
-           self.agent = AgentCV3(...)
+1. **実験の実行** ✅ Ready
+   ```bash
+   python experiments/run_valence_experiment.py
    ```
-
-2. **Condition 2の統合**
-   - `run_valence_experiment.py`の`run_condition_2()`を実装
 
 ### Short-term (Day 2-3)
 
