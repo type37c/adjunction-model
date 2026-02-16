@@ -108,14 +108,27 @@ Active Inferenceを**そのまま**使うのではなく、保留構造の原則
 
 → 予測誤差と不確実性を**最小化**する行動を選ぶ
 
-### 4.2 保留構造版のActive Inference
+### 4.2 保留構造版のActive Inference（2026-02-16改訂）
+
+2026年2月16日の議論に基づき、Priority計算の考え方を修正する。
+
+**旧来の考え方（問題点）**:
+> 行動選択 = argmax_a (coherence × uncertainty × valence)
+
+この掛け算は、3つの軸の質的な違いを無視した過剰設計であった。
+
+**新しい考え方：軸の提供と使用法の創発**
+
+行動選択は、Agent Cが内的に学習する。
 
 ```
-行動選択 = argmax_a E[創造的余地 | a]
-         = argmax_a (coherence × uncertainty × valence)
+観測 = {coherence, uncertainty, ...}
+記憶 = {valence, ...}
+
+行動選択 = AgentC(観測, 記憶)
 ```
 
-→ 破綻（coherence）と不確実性（uncertainty）が**高く**、かつ過去に良い結果が出た（valence）行動を選ぶ
+Agent Cは、観測（coherence, uncertainty）と記憶（valence）を統合し、どの情報に注意を払うべきかを**自分で学習する**。これにより、注意の配分方式そのものが創発の対象となる。
 
 ### 4.3 具体的な内発的動機の設計
 

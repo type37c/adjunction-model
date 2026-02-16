@@ -37,41 +37,30 @@
   - [x] Affordance Loss reduced by 96.78% ✓
   - [x] **CONCLUSION**: Phase 2 Slack successfully preserves suspension structure
 
-### **Curiosity v6: η-based Intrinsic Motivation - DESIGNED ✓ (2026-02-14)**
-- **GOAL**: Redefine curiosity based on experimental results
-- [x] **Design Curiosity v6** - COMPLETED ✓
-  - [x] Definition: `R_curiosity = η(t-1) - η(t)` (η reduction)
-  - [x] Rationale: η-ε strong correlation (r=0.835) → η-only is sufficient
-  - [x] Architecture: AgentLayerC_v6 with simplified intrinsic reward
-  - [x] Document: `docs/docs/docs/CURIOSITY_V6_DESIGN.md`
-- [ ] **Implement Curiosity v6** (NEXT STEP)
-  - [ ] Create `src/models/agent_layer_v6.py`
-  - [ ] Create `src/models/conditional_adjunction_v6.py`
-  - [ ] Create `src/training/train_phase2_curiosity_v6.py`
-  - [ ] Run 50-epoch experiment
-  - [ ] Compare with Phase 2 Slack (no curiosity baseline)
+### **Phase 2.5: Valence Role Experiment - PLANNED (2026-02-16)**
+- **GOAL**: To experimentally verify the role of `valence` in a controlled environment.
+- **RATIONALE**: The 2026-02-16 discussion revealed that `valence` and `priority` were not driving the training in Phase 2 Slack. This experiment is designed to isolate and measure their true effect.
+- **REFERENCE**: `NEW_PLAN.md`
 
-### **Purpose-Emergent Active Assembly - IMPLEMENTED ✓ (2026-02-14)**
-- **GOAL**: Test whether purpose (directional intent) emerges from slack without explicit target assignment
-- **DESIGN**: Agent assembles scattered points toward reference shapes (sphere, cube, cylinder) **without being told which to target**. Purpose loss is `min_shape CD(assembled, reference)`.
-- [x] **Implement Purposeless Assembly Dataset** - COMPLETED ✓
-  - [x] `src/data/purposeless_dataset.py`: Scattered initial points, no target assignment
-  - [x] Reference shapes (sphere, cube, cylinder) pre-computed and shared
-  - [x] Collate function for batch processing
-- [x] **Implement Purpose-Emergent Experiment** - COMPLETED ✓
-  - [x] `experiments/purpose_emergent_experiment.py`: Main experiment script
-  - [x] DisplacementHead: context + per-point affordances → Δx ∈ R³
-  - [x] Purpose loss: `min_shape CD(assembled, ref_shape)`
-  - [x] PurposeEmergentTrainer: Baseline vs purpose-emergent conditions
-- [x] **Implement Analysis Script** - COMPLETED ✓
-  - [x] `experiments/analyze_purpose_emergent.py`: Purpose loss trajectories, shape selection analysis
-- [x] **Integration Tests** - COMPLETED ✓
-  - [x] `tests/test_purpose_emergent.py`: Dataset and model tests
-- [ ] **Run Full Experiment** (NEXT PRIORITY)
-  - [ ] Run extended training (100+ epochs)
-  - [ ] Analyze results: Does agent spontaneously choose target shapes?
-  - [ ] Track purpose loss convergence
-  - [ ] Document findings
+- [ ] **Step 1: Codebase Refactoring**
+  - [ ] Refactor `priority.py` into `priority_v2.py` and `priority_v3.py`.
+  - [ ] Refactor `agent_c.py` to clarify components for each experimental condition.
+  - [ ] Refactor `valence_v2.py` to align with its new role as a memory of `(action, Δη)`.
+
+- [ ] **Step 2: Implement Condition 2 (Emergent Valence)**
+  - [ ] Create `ValenceMemoryV3` that records `(action, Δη)`.
+  - [ ] Create `AgentCV3` that removes the Priority module and feeds `coherence`, `uncertainty`, and `valence` directly into the RSSM.
+  - [ ] Create `train_phase2_condition2.py`.
+
+- [ ] **Step 3: Implement Condition 3 (Designed Valence)**
+  - [ ] Modify `valence_v2.py` to make intrinsic reward weights configurable.
+  - [ ] Create `train_phase2_condition3.py` that enables valence updates via intrinsic rewards.
+
+- [ ] **Step 4: Run & Analyze Experiments**
+  - [ ] Run Condition 1 (reproduce Phase 2 Slack baseline).
+  - [ ] Run Condition 2 and Condition 3 experiments (50 epochs each).
+  - [ ] Create analysis scripts to compare η, ε, L_aff, and internal states across all three conditions.
+  - [ ] Generate a final report and visualizations in `experiments/phase2_valence_experiment/`.
 
 ## Phase 3: Language Grounding - NOT STARTED
 

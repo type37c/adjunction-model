@@ -49,16 +49,24 @@ The training loop proceeds for a fixed number of steps (`num_steps`).
 2.  **Curiosity Reward**: A curiosity reward `R_curiosity = η(t-1) - η(t)` is calculated. A decrease in η (moving towards a coherent shape) is rewarded.
 3.  **Loss Calculation**: The total loss `L = L_purpose + λ_coherence * L_coherence + λ_kl * L_kl` is calculated **only at the final step**. This gives the agent the freedom to decide *when* to commit.
 
-### 2.4. Inertia of Purpose: The Role of Valence Memory
+### 2.4. Inertia of Purpose: The Role of Valence Memory (Revised on 2026-02-16)
 
-The `valence_memory` in our agent layer naturally creates an "inertia of purpose."
+The mechanism for creating an "inertia of purpose" has been refined based on the latest theoretical insights.
 
-1.  **Step 0**: `valence = [0, 0, 0]`. Displacements are isotropic (exploration).
-2.  **Step 2**: A random move slightly decreases the distance to the sphere. `R_curiosity` becomes positive.
-3.  **Step 3**: The valence for the "sphere" direction increases. Priority attention is biased towards sphere-related features, leading to further movement in that direction.
-4.  **Step 5**: A positive feedback loop is established. As the agent converges to the sphere, η stabilizes, `R_curiosity` approaches zero, and the agent stops exploring. **Commitment is complete.**
+**Previous Idea (Problematic)**:
+- The `valence` was updated based on `R_curiosity = η(t-1) - η(t)`.
+- This reward was then used in a `Priority = coherence × uncertainty × valence` calculation.
+- This approach was an over-design, as it hard-coded the attention mechanism.
 
-This realizes the principle: **"We do not design the suspension structure; we design the conditions for its emergence."**
+**New Principle: Emergence of Attention Mechanism**
+
+1.  **Feedback Loop**: The agent's action causes a change in Slack (`Δη`). This change is not a reward but a **consequence**.
+2.  **Valence as Memory**: `valence_memory` records the association between the action taken and the resulting `Δη`.
+3.  **Internal State Update**: The `valence` (the memory of action-consequence pairs) is fed into the agent's RSSM (`h_t`).
+4.  **Learned Attention**: The agent's RSSM learns to use this `valence` memory, along with current observations of `coherence` and `uncertainty`, to decide where to allocate attention.
+5.  **Self-Organized Commitment**: A positive feedback loop is established not by an explicit reward, but by the agent learning that certain actions lead to stable and predictable Slack dynamics. The agent learns to commit to a shape because doing so creates a more manageable internal state.
+
+This new design is a more faithful implementation of our core principle: **"We do not design the suspension structure; we design the conditions for its emergence."** We are no longer designing the attention mechanism (the Priority formula); we are designing the conditions (the feedback loop and memory structure) under which the attention mechanism itself can emerge.
 
 ---
 

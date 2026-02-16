@@ -135,11 +135,18 @@ We provide a stable world model (the "riverbed" learned in Phase 2), give the ag
 
 この目的の創発を駆動するのが、**Priority原理**である [6]。
 
-Driving this emergence of purpose is the **Priority Principle** [6].
+Driving this emergence of purpoこの目的の創発を駆動するメカニズムは、当初**Priority原理**として定式化された [6]。しかし、2026年2月16日の詳細な理論的検討の結果、この原理はより洗練された形に昇華された。
 
-> **priority = coherence × uncertainty × valence**
+**旧原理（問題点）**:
+> priority = coherence × uncertainty × valence
 
-エージェントは、現在のモデルが破綻しており(coherence)、それが何なのか不確かで(uncertainty)、かつ過去にその種の破綻に向き合って良い結果が得られた(valence)領域に、優先的に注意を向ける。この価値判断の蓄積(valence)こそが、目的の核となる。
+この掛け算による定式化は、3つの軸の質的な違い（特にvalenceの時間性）を無視し、注意の配分方法という「どう使うか」の部分まで人間が設計してしまう**過剰設計**であったことが明らかになった。
+
+**新原理：軸の提供と使用法の創発**
+
+> **設計するのは軸（coherence, uncertainty, valence）であり、それをどう使うかは創発に委ねる。**
+
+新しい原理では、Priority計算モジュールは廃止される。代わりに、coherenceとuncertaintyは「観測」として、valenceは「記憶」としてAgent Cに直接提供される。Agent Cは、これらの入力を統合し、どの情報に注意を払うべきかを**自ら学習する**。この注意の配分方法そのものが、創発の対象となるのである。この価値判断の蓄積と自己組織化こそが、目的の核となる。
 
 The agent preferentially directs its attention to areas where its current model is broken (coherence), it is unsure what it is (uncertainty), and it has had positive outcomes from addressing similar breakdowns in the past (valence). This accumulation of value judgment (valence) forms the core of purpose.
 
