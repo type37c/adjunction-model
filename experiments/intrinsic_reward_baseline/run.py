@@ -106,6 +106,8 @@ def train_epoch(trainer, dataloader, epoch, config):
         'avg_coherence': 0.0,
         'avg_uncertainty': 0.0,
         'avg_valence': 0.0,
+        'avg_eta': 0.0,
+        'avg_epsilon': 0.0,
         'value_start': 0.0,
         'value_end': 0.0,
         'td_loss': 0.0,
@@ -202,6 +204,8 @@ def main():
         'avg_coherence': [],
         'avg_uncertainty': [],
         'avg_valence': [],
+        'avg_eta': [],
+        'avg_epsilon': [],
         'value_start': [],
         'value_end': [],
         'td_loss': [],
@@ -230,6 +234,8 @@ def main():
         print(f"  Coherence: {metrics['avg_coherence']:.4f}")
         print(f"  Uncertainty: {metrics['avg_uncertainty']:.4f}")
         print(f"  Valence: {metrics['avg_valence']:.4f}")
+        print(f"  Eta: {metrics['avg_eta']:.4f}")
+        print(f"  Epsilon: {metrics['avg_epsilon']:.4f}")
         print(f"  Value (start): {metrics['value_start']:.4f}")
         print(f"  Value (end): {metrics['value_end']:.4f}")
         print(f"  TD Loss: {metrics['td_loss']:.4f}")
@@ -280,6 +286,8 @@ def main():
     print(f"  Valence: {history['avg_valence'][-1]:.4f}")
     print(f"  Coherence: {history['avg_coherence'][-1]:.4f}")
     print(f"  Uncertainty: {history['avg_uncertainty'][-1]:.4f}")
+    print(f"  Eta: {history['avg_eta'][-1]:.4f}")
+    print(f"  Epsilon: {history['avg_epsilon'][-1]:.4f}")
     print(f"  Value (end): {history['value_end'][-1]:.4f}")
     
     # Compare with 2/13 results

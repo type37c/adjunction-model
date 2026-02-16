@@ -146,6 +146,8 @@ class ValueBasedAgentTrainer:
         total_coherence = 0.0
         total_uncertainty = 0.0
         total_valence = 0.0
+        total_eta = 0.0
+        total_epsilon = 0.0
         r_curiosity_sum = 0.0
         r_competence_sum = 0.0
         r_novelty_sum = 0.0
@@ -188,6 +190,8 @@ class ValueBasedAgentTrainer:
                 'coherence': results['coherence_signal'].mean().item(),
                 'uncertainty': agent_info.get('uncertainty', torch.tensor(0.0)).item(),
                 'valence': agent_info.get('valence_mean', torch.tensor(0.0)).item(),
+                'eta': results.get('eta', torch.tensor(0.0)).item(),
+                'epsilon': results.get('epsilon', torch.tensor(0.0)).item(),
                 'points': points,
                 'batch': batch_indices,
                 'coherence_signal_prev': coherence_signal_prev.clone(),
@@ -199,6 +203,8 @@ class ValueBasedAgentTrainer:
             total_coherence += results['coherence_signal'].mean().item()
             total_uncertainty += agent_info.get('uncertainty', torch.tensor(0.0)).item()
             total_valence += agent_info.get('valence_mean', torch.tensor(0.0)).item()
+            total_eta += results.get('eta', torch.tensor(0.0)).item()
+            total_epsilon += results.get('epsilon', torch.tensor(0.0)).item()
             r_curiosity_sum += R_curiosity.item() if isinstance(R_curiosity, torch.Tensor) else R_curiosity
             r_competence_sum += R_competence.item() if isinstance(R_competence, torch.Tensor) else R_competence
             r_novelty_sum += R_novelty.item() if isinstance(R_novelty, torch.Tensor) else R_novelty
@@ -281,6 +287,8 @@ class ValueBasedAgentTrainer:
             'avg_coherence': total_coherence / num_steps,
             'avg_uncertainty': total_uncertainty / num_steps,
             'avg_valence': total_valence / num_steps,
+            'avg_eta': total_eta / num_steps,
+            'avg_epsilon': total_epsilon / num_steps,
             'value_start': trajectory[0]['value'] if trajectory else 0.0,
             'value_end': trajectory[-1]['value'] if trajectory else 0.0,
             'td_loss': td_loss_sum / num_steps,
