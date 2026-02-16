@@ -1,5 +1,51 @@
 # TODO: Adjunction Model Development
 
+## Experiment Directory Restructuring - COMPLETED ✓ (2026-02-16)
+
+Following the 2026-02-16 discussion and dev_instructions.pdf, experiments have been reorganized to clearly separate **loss function-driven** and **intrinsic reward-driven** approaches.
+
+**New Structure**:
+- `experiments/slack_affordance_loss/` - Phase 2 Slack (Affordance Loss driven) ✓
+- `experiments/intrinsic_reward_baseline/` - Pure intrinsic motivation (2/13 reproduction) ✓
+- `experiments/intrinsic_reward_curiosity/` - Intrinsic + Curiosity v6 (planned)
+- `experiments/temporal_suspension/` - Temporal suspension structure (planned)
+- `experiments/purpose_emergent/` - Purpose-emergent assembly ✓
+
+**Archived**:
+- `phase2_valence_experiment/` → `docs/archive/2026-02-16/` (superseded by new approach)
+
+---
+
+## Current Priority: Intrinsic Reward Baseline Experiment
+
+### **Intrinsic Reward Baseline - IMPLEMENTED ✓ (2026-02-16)**
+
+**Goal**: Reproduce the 2/13 experiment in a clean codebase to verify that intrinsic motivation alone (without external objectives) can drive structure formation.
+
+**Status**: ✅ Implementation complete, ready to run
+
+**Implementation**:
+- [x] Create experiment directory structure
+- [x] Create `config.yaml` with 2/13 parameters
+- [x] Implement `IntrinsicRewardTrainer` (F/G frozen, no Affordance Loss)
+- [x] Create `run.py` (training script)
+- [x] Create `analyze.py` (analysis and visualization)
+- [x] Create `README.md` (experiment documentation)
+
+**Next Steps**:
+- [ ] Run experiment (100 epochs, ~2-3 hours on CPU)
+- [ ] Analyze results and compare with 2/13
+- [ ] Document findings
+- [ ] Update theory documents based on results
+
+**Expected Results** (from 2/13):
+- Intrinsic reward: +1584%
+- Valence growth: +15% (accelerating)
+- Coherence: stable (~0.43)
+- Competence contribution: 59.5%
+
+---
+
 ## Phase 1: Adjoint Layer (F⊣G) - COMPLETED ✓
 
 - [x] Implement Functor F (Shape → Action)
@@ -8,59 +54,44 @@
 - [x] Basic training loop for F⊣G
 - [x] Synthetic dataset for MVP
 
-## Phase 2: Agent Layer C - REVISED (NEW)
+## Phase 2: Agent Layer C - REVISED
 
-### v1-v4: Initial Implementations - COMPLETED ✓
-- [x] RSSM, Priority Attention, Valence Memory, Intrinsic Motivation
-- **NOTE**: These were built on a flawed training process. See `docs/phase2_slack_implementation_analysis_2026_02_14.md`.
+### **slack_affordance_loss/ Experiment - COMPLETED ✓ (2026-02-14)**
 
-### **Phase 2 Slack: η/ε Preservation Training - COMPLETED ✓ (2026-02-14)**
-- **GOAL**: Train F⊣G and Agent C simultaneously **without reconstruction loss** to preserve η and ε as "slack".
-- [x] **Implement Phase 2 Slack Trainer** - COMPLETED ✓
-  - [x] Train F⊣G and Agent C from scratch.
-  - [x] Use Affordance Loss (`L_aff`) as the primary driver.
-  - [x] **Remove Reconstruction Loss (`L_recon`)** to stop minimizing η.
-  - [x] Add Coherence Regularization (`L_coherence`) to prevent η from collapsing to zero.
-  - [x] Implement Counit `ε` calculation and tracking.
-- [x] **Debug and Validate Forward Pass** - COMPLETED ✓
-  - [x] Fixed multiple tensor shape and dimension mismatches.
-  - [x] Created `docs/tensor_shape_specification_2026_02_14.md` to prevent recurrence.
-- [x] **Run Full-Scale Slack Experiment (Local CPU)** - COMPLETED ✓ (2026-02-14)
-  - [x] 50 epochs, 100 shapes, batch size 8
-  - [x] Results saved to `experiments/phase2_slack_results/`
-  - [x] Detailed analysis completed
-  - [x] Visualization generated
-- [x] **Analyze Slack Experiment Results** - COMPLETED ✓ (2026-02-14)
-  - [x] η preserved: 0.502-0.520 (mean: 0.5153) ✓
-  - [x] ε dynamic: 0.096-1.044 (mean: 0.8238) ✓
-  - [x] Strong η-ε correlation: r = 0.835 (p < 0.001) ✓
-  - [x] Affordance Loss reduced by 96.78% ✓
-  - [x] **CONCLUSION**: Phase 2 Slack successfully preserves suspension structure
+**Formerly**: Phase 2 Slack
 
-### **Phase 2.5: Valence Role Experiment - PLANNED (2026-02-16)**
-- **GOAL**: To experimentally verify the role of `valence` in a controlled environment.
-- **RATIONALE**: The 2026-02-16 discussion revealed that `valence` and `priority` were not driving the training in Phase 2 Slack. This experiment is designed to isolate and measure their true effect.
-- **REFERENCE**: `NEW_PLAN.md`
+**Goal**: Train F⊣G and Agent C simultaneously **without reconstruction loss** to preserve η and ε as "slack", using Affordance Loss as the driving force.
 
-- [x] **Step 1: Codebase Refactoring** - COMPLETED ✓
-  - [x] Refactor `priority.py` into `priority_v2.py` and `priority_v3.py`.
-  - [x] Created `valence_v3.py` as a memory of `(action, Δη)`.
+**Status**: ✅ Completed
 
-- [x] **Step 2: Implement Condition 2 (Emergent Valence)** - COMPLETED ✓
-  - [x] Create `ValenceMemoryV3` that records `(action, Δη)`.
-  - [x] Create `AgentCV3` that removes the Priority module and feeds `coherence`, `uncertainty`, and `valence` directly into the RSSM.
-  - [x] Create `AdjunctionModelV3` that integrates `AgentCV3`.
-  - [x] Integrate into `run_valence_experiment.py`.
+**Key Findings**:
+- η preserved: 0.502-0.520 (mean: 0.5153) ✓
+- ε dynamic: 0.096-1.044 (mean: 0.8238) ✓
+- Strong η-ε correlation: r = 0.835 (p < 0.001) ✓
+- Affordance Loss reduced by 96.78% ✓
+- **CONCLUSION**: Slack can be preserved with external objectives (Affordance Loss)
 
-- [x] **Step 3: Implement Condition 3 (Designed Valence)** - COMPLETED ✓
-  - [x] Use existing `Agent C` with `alpha_curiosity > 0` to enable valence updates.
-  - [x] Integrate into `run_valence_experiment.py`.
+**Limitation**: This is an extension of existing AI paradigms (external objective-driven). The unique claim of this project is that **intrinsic motivation alone** can drive structure formation.
 
-- [ ] **Step 4: Run & Analyze Experiments** (NEXT STEP)
-  - [ ] Run all 3 conditions (50 epochs each, ~2-3 hours on CPU).
-  - [ ] Analyze results using `analyze_valence_experiment.py`.
-  - [ ] Generate comparison plots and statistical analysis.
-  - [ ] Update theory documents based on findings.
+### **intrinsic_reward_baseline/ Experiment - IMPLEMENTED ✓ (2026-02-16)**
+
+See "Current Priority" section above.
+
+### **intrinsic_reward_curiosity/ Experiment - PLANNED**
+
+**Goal**: Test Curiosity v6 (η-based) on top of the intrinsic reward baseline.
+
+**Status**: 📋 Planned (after intrinsic_reward_baseline results)
+
+**Design**:
+- F/G frozen
+- Intrinsic rewards: Competence + Novelty + Curiosity
+- Curiosity v6 definition: `R_curiosity = η(t-1) - η(t)`
+- Rationale: η-ε correlation (r=0.835) suggests η-only curiosity is sufficient
+
+**Next Steps**:
+- [ ] Implement after intrinsic_reward_baseline is validated
+- [ ] Compare with baseline (Curiosity disabled)
 
 ## Phase 3: Language Grounding - NOT STARTED
 
@@ -69,122 +100,73 @@
 - [ ] Implement P → language mapping
 - [ ] Test language grounding with simple phrases
 
-## Current Issues & Next Steps
+---
 
-### HIGH PRIORITY
+## Theoretical Questions
 
-1. **Analyze Purpose-Emergent Experiment Results** (IMMEDIATE NEXT STEP)
-   - **Goal**: Understand whether purpose emerges from slack without target assignment
-   - **Steps**:
-     - [ ] Run extended training (100+ epochs) for both conditions
-     - [ ] Analyze purpose loss convergence patterns
-     - [ ] Track which reference shapes agent converges toward
-     - [ ] Compare purpose-emergent vs baseline conditions
-     - [ ] Measure shape selection consistency across episodes
-   - **Expected**: Agent spontaneously chooses and commits to specific shapes
+### 1. **Does Preserving η/ε Lead to Suspension Structures?** ✓ ANSWERED
 
-2. **Scale Purpose-Emergent Experiments**
-   - **Goal**: Test robustness and generalization
-   - **Steps**:
-     - [ ] Increase number of reference shapes (add torus, pyramid, etc.)
-     - [ ] Test with larger point clouds (512, 1024 points)
-     - [ ] Vary slack preservation parameters (λ_coherence)
-     - [ ] Document scaling behavior
-   - **Expected**: Purpose emergence scales with model capacity
+**YES**: `slack_affordance_loss/` experiment successfully preserves η (0.50-0.52) and ε (0.10-1.04).
 
-### MEDIUM PRIORITY
+**NEXT**: Does intrinsic motivation alone (without Affordance Loss) also preserve slack?
 
-3. **Implement Curiosity v6** (RESEARCH PRIORITY)
-   - **Goal**: Test η-based curiosity in Phase 2 Slack framework
-   - **Steps**:
-     - [ ] Create `agent_layer_v6.py` (η-only intrinsic reward)
-     - [ ] Create `conditional_adjunction_v6.py` (use v6 agent)
-     - [ ] Create `train_phase2_curiosity_v6.py` (training script)
-     - [ ] Run 50-epoch experiment (CPU, 2-3 hours)
-     - [ ] Analyze: Does valence correlate with η reduction?
-     - [ ] Compare with Phase 2 Slack baseline
-   - **Expected**: Curiosity-driven learning improves over baseline
+### 2. **What is the emergent relationship between η and ε?** ✓ ANSWERED
 
-4. **Update `research_note_ja.md`**
-   - [ ] Add Phase 2 Slack results section
-   - [ ] Document η-ε correlation (r=0.835)
-   - [ ] Add Purpose-Emergent experiment design
-   - [ ] Explain emergent goal formation hypothesis
-   - [ ] Include key insights on slack and purpose
+**Strong positive correlation**: r = 0.835 (p < 0.001)
 
-### LOW PRIORITY
+**Implication**: Controlling η also controls ε → η-only curiosity is sufficient (Curiosity v6)
 
-5. **Kaggle Notebook Cleanup** (OPTIONAL)
-   - **Status**: Local CPU experiment succeeded, Kaggle not critical
-   - [ ] Fix cell order for "Run All" compatibility (if needed in future)
-   - [ ] Test GPU execution (if GPU experiments become necessary)
+### 3. **Can intrinsic motivation alone drive structure formation?** ⏳ BEING TESTED
 
-6. **Consider Alternative GPU Options**
-   - **Current**: Local CPU is working well for current experiments
-   - **Future**: If 100+ epochs or larger datasets are needed
-   - [ ] Research CLI-based GPU rental options (Vast.ai, RunPod)
-   - [ ] Test workflow on alternative platform
+**Hypothesis**: Internal発的報酬 (Competence + Novelty) alone can drive Agent C's learning without external objectives.
 
-## Theoretical Questions to Investigate
+**Approach**: `intrinsic_reward_baseline/` experiment (2/13 reproduction)
 
-1. **Does Preserving η/ε Lead to Suspension Structures?** ✓ ANSWERED
-   - **YES**: Phase 2 Slack successfully preserves η (0.50-0.52) and ε (0.10-1.04)
-   - **NEXT**: Does curiosity-driven learning enhance suspension structure?
+**Key Question**: Can we reproduce 2/13 results (+1584% intrinsic reward, +15% valence growth)?
 
-2. **What is the emergent relationship between η and ε?** ✓ ANSWERED
-   - **Strong positive correlation**: r = 0.835 (p < 0.001)
-   - **Implication**: Controlling η also controls ε
-   - **Curiosity design**: η-only is sufficient (Curiosity v6)
+### 4. **Can purpose emerge without explicit targets?** ⏳ PLANNED
 
-3. **What is the new role of Intrinsic Motivation?** ✓ PARTIALLY ANSWERED
-   - **Curiosity**: Redefined as η reduction (`R_curiosity = η(t-1) - η(t)`)
-   - **Competence**: Affordance prediction accuracy (unchanged)
-   - **Novelty**: KL divergence of RSSM (unchanged)
-   - **NEXT**: Validate Curiosity v6 in experiments
+**Hypothesis**: Purpose (directional intent) emerges from slack alone.
 
-4. **Can purpose emerge without explicit targets?** ⏳ BEING TESTED
-   - **Hypothesis**: Purpose (directional intent) emerges from slack alone
-   - **Approach**: Purpose-Emergent Active Assembly — agent rewarded for approaching ANY coherent shape
-   - **Key Question**: Does agent spontaneously choose and commit to specific shapes?
-   - **NEXT**: Run extended experiments and analyze shape selection patterns
+**Approach**: `purpose_emergent/` experiment — agent rewarded for approaching ANY coherent shape
 
-## Recent Progress (2026-02-14)
+**Key Question**: Does agent spontaneously choose and commit to specific shapes?
 
-### Completed
-- ✅ **Phase 2 Slack Experiment Completed** (50 epochs, local CPU)
-  - η preserved: 0.502-0.520 (does not collapse to 0)
-  - ε dynamic: 0.096-1.044 (observable and meaningful)
-  - η-ε correlation: r = 0.835 (strong positive)
-  - Affordance Loss: 96.78% reduction (learning successful)
-- ✅ **Detailed Analysis and Visualization**
-  - Created `detailed_analysis.png` with 8 subplots
-  - Generated `analysis_report.txt` with statistics
-  - Saved `correlation_analysis.json` for future reference
-  - Documented `KEY_FINDINGS.md` with theoretical implications
-- ✅ **Curiosity v6 Design Completed**
-  - Definition: η-based curiosity (`R_curiosity = η(t-1) - η(t)`)
-  - Rationale: η-ε correlation → η-only sufficient
-  - Architecture: AgentLayerC_v6 with simplified intrinsic reward
-  - Document: `CURIOSITY_V6_DESIGN.md`
-- ✅ **Purpose-Emergent Active Assembly Implemented**
-  - Dataset: Scattered points, no target assignment
-  - Purpose loss: `min_shape CD(assembled, reference)`
-  - Tests: Integration tests passing
-  - Status: Ready for extended experiments
-
-### Key Insights
-- **η-ε coupling**: Strong correlation (r=0.835) simplifies curiosity design
-- **Slack preservation**: Removing reconstruction loss allows slack to grow while task performance improves
-- **Purpose hypothesis**: Testing whether goal-directed behavior emerges without explicit targets
-
-### Next Session Goals
-1. Run extended Purpose-Emergent experiments (100+ epochs)
-2. Analyze shape selection patterns and convergence
-3. Compare purpose-emergent vs baseline conditions
-4. Document findings on emergent goal formation
-5. Implement Curiosity v6 (if time permits)
+**Status**: Implemented, pending extended experiments
 
 ---
 
-**Last Updated**: 2026-02-14  
-**Status**: Phase 2 Slack completed. Purpose-Emergent Active Assembly implemented (pending extended experiments). Curiosity v6 designed.
+## Recent Progress (2026-02-16)
+
+### Completed
+- ✅ **Experiment Directory Restructuring**
+  - Separated loss function-driven vs intrinsic reward-driven experiments
+  - Created clear naming and documentation structure
+  - Archived obsolete experiments
+- ✅ **Intrinsic Reward Baseline Implementation**
+  - Implemented `IntrinsicRewardTrainer` (F/G frozen, no Affordance Loss)
+  - Created complete experiment package (config, run, analyze, README)
+  - Ready to reproduce 2/13 results
+- ✅ **Documentation Updates**
+  - Created `experiments/README.md` (experiment overview)
+  - Created experiment templates in `_templates/`
+  - Updated individual experiment READMEs
+
+### Key Insights from 2026-02-16 Discussion
+- **Core hypothesis**: Intrinsic motivation alone can drive structure formation (not just external objectives)
+- **2/13 success factors**: Competence reward ("attending to breakdowns") was the primary driving force (59.5%)
+- **Design principle**: Separate loss function-driven and intrinsic reward-driven experiments completely
+- **Priority shift**: Focus on intrinsic reward experiments as the unique contribution of this project
+
+### Next Session Goals
+1. **Run intrinsic_reward_baseline experiment** (100 epochs, ~2-3 hours)
+2. **Analyze and compare with 2/13 results**
+3. **Document findings** and update theory documents
+4. **Decide next steps** based on results:
+   - If successful: Implement intrinsic_reward_curiosity
+   - If unsuccessful: Debug and iterate
+
+---
+
+**Last Updated**: 2026-02-16  
+**Status**: Experiment directory restructured. Intrinsic reward baseline implemented and ready to run.

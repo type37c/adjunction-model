@@ -96,6 +96,22 @@ class AdjunctionModel(nn.Module):
         """Initialize agent state."""
         return self.agent_c.initial_state(batch_size, device)
     
+    def freeze_fg(self):
+        """Freeze F and G parameters (for value-based training)."""
+        for param in self.F.parameters():
+            param.requires_grad = False
+        for param in self.G.parameters():
+            param.requires_grad = False
+        print("F and G parameters frozen")
+    
+    def unfreeze_fg(self):
+        """Unfreeze F and G parameters."""
+        for param in self.F.parameters():
+            param.requires_grad = True
+        for param in self.G.parameters():
+            param.requires_grad = True
+        print("F and G parameters unfrozen")
+    
     def forward(
         self,
         pos: torch.Tensor,

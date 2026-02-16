@@ -1,0 +1,70 @@
+# Experiment Configuration Template
+
+experiment:
+  name: "experiment_name"
+  description: "Brief description of what this experiment tests"
+  
+model:
+  fg_frozen: true              # F/G を固定するか (true/false)
+  use_priority: false          # Priority モジュールを使うか (true/false)
+  num_affordances: 5
+  num_points: 256
+  f_hidden_dim: 64
+  g_hidden_dim: 128
+  agent_c:
+    rssm_hidden_dim: 128
+    rssm_state_dim: 64
+    valence_dim: 32
+
+training:
+  driving_mode: "intrinsic"    # "loss_function" or "intrinsic"
+  
+  loss:
+    affordance_loss: false     # 外部目的を与えるか
+    kl_loss: true              # RSSM 正則化
+    coherence_loss: false      # Coherence 崩壊防止（通常は false）
+    
+  intrinsic_reward:
+    competence:
+      enabled: true
+      weight: 0.6
+      type: "attention_to_breakdown"  # "breakdown_reduction" or "attention_to_breakdown"
+      scale: 100.0
+    novelty:
+      enabled: true
+      weight: 0.4
+      scale: 0.1
+    curiosity:
+      enabled: false           # baseline では無効
+      weight: 0.0
+      type: "uncertainty_reduction_episodic"  # 案G
+      
+  optimizer:
+    type: "Adam"
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    
+  scheduler:
+    type: "StepLR"
+    step_size: 20
+    gamma: 0.5
+    
+  epochs: 100
+  episodes_per_epoch: 10
+  batch_size: 8
+  
+dataset:
+  num_shapes: 100
+  num_points: 256
+  noise_std: 0.01
+  
+logging:
+  log_interval: 10
+  save_interval: 10
+  checkpoint_dir: "results/checkpoints"
+  log_dir: "results/logs"
+  
+visualization:
+  plot_interval: 10
+  save_plots: true
+  plot_dir: "results/plots"

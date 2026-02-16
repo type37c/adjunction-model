@@ -1,0 +1,57 @@
+# Intrinsic Reward Baseline Experiment Configuration
+# Reproduces 2/13 experiment with clean codebase
+
+experiment:
+  name: "intrinsic_reward_baseline"
+  description: "Pure intrinsic motivation (Competence + Novelty) without external objectives"
+  
+model:
+  num_affordances: 5
+  num_points: 256
+  f_hidden_dim: 64
+  g_hidden_dim: 128
+  agent_hidden_dim: 256
+  agent_latent_dim: 64
+  context_dim: 128
+  valence_dim: 32
+  valence_decay: 0.1
+  uncertainty_type: 'entropy'
+  attention_temperature: 1.0
+
+intrinsic_rewards:
+  alpha_curiosity: 0.0   # Curiosity disabled (2/13)
+  beta_competence: 0.6   # Competence weight
+  gamma_novelty: 0.4     # Novelty weight
+
+value_function:
+  hidden_dim: 256
+
+training:
+  num_epochs: 50
+  batch_size: 4
+  episode_length: 5      # Number of steps per episode (2/13)
+  agent_lr: 0.0001       # Agent C learning rate
+  value_lr: 0.001        # Value function learning rate
+  gamma: 0.99            # Discount factor for TD learning
+  log_interval: 5
+  save_interval: 10
+  
+data:
+  num_samples: 100
+  shape_types: ['sphere', 'cube', 'cylinder']
+
+# 2/13で記録されたメトリクス
+metrics:
+  - intrinsic_reward_total
+  - intrinsic_reward_competence
+  - intrinsic_reward_novelty
+  - valence_mean
+  - valence_growth_rate
+  - coherence_mean
+  - coherence_stability
+  - uncertainty_mean
+  - uncertainty_trend
+  - eta_mean  # 知覚的余白
+  - epsilon_mean  # 意味的余白
+  - kl_divergence
+  - value_function
