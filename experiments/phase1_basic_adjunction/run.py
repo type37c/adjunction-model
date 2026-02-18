@@ -192,8 +192,8 @@ def run_phase1_experiment(
               f"Aff: {val_metrics['aff']:.4f}, "
               f"η: {val_metrics['eta']:.4f}")
         
-        # Save checkpoint every 10 epochs
-        if epoch % 10 == 0:
+        # Save checkpoint every 5 epochs (more frequent)
+        if epoch % 5 == 0:
             checkpoint_path = checkpoint_dir / f"phase1_epoch_{epoch}.pt"
             torch.save({
                 'epoch': epoch,
@@ -250,7 +250,14 @@ def run_phase1_experiment(
 
 
 if __name__ == '__main__':
+    import sys
+    from datetime import datetime
+    
     device = torch.device('cpu')
+    
+    print(f"[{datetime.now()}] Starting Phase 1 experiment...")
+    sys.stdout.flush()
+    
     run_phase1_experiment(
         num_epochs=50,
         batch_size=4,
@@ -259,3 +266,6 @@ if __name__ == '__main__':
         device=device,
         resume=True  # Enable automatic resume
     )
+    
+    print(f"[{datetime.now()}] Phase 1 experiment completed!")
+    sys.stdout.flush()

@@ -23,6 +23,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from typing import Dict, Optional
 import sys
+from datetime import datetime
 sys.path.append('/home/ubuntu/adjunction-model')
 
 from src.models.adjunction_model import AdjunctionModel
@@ -171,11 +172,12 @@ class Phase1BasicTrainer:
             num_batches += 1
             
             if batch_idx % 10 == 0:
-                print(f"  Batch {batch_idx}/{len(dataloader)}: "
+                print(f"  [{datetime.now().strftime('%H:%M:%S')}] Batch {batch_idx}/{len(dataloader)}: "
                       f"Loss={loss.item():.4f}, "
                       f"Recon={L_recon.item():.4f}, "
                       f"Aff={L_aff.item():.4f}, "
                       f"η={coherence_signal.mean().item():.4f}")
+                sys.stdout.flush()  # Force output to be written immediately
         
         # Average metrics
         metrics = {
