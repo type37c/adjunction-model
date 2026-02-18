@@ -211,7 +211,8 @@ class Phase2Experiment:
             
             # Get affordance prediction for this segment
             with torch.no_grad():
-                affordance_pred = self.fg_model.F(segment_points.unsqueeze(0).to(self.device))
+                affordances_part = self.fg_model.F(segment_points.to(self.device))  # (N_part, affordance_dim)
+                affordance_pred = affordances_part.mean(dim=0, keepdim=True)  # (1, affordance_dim) - global pooling
                 predicted_affordances[action] = affordance_pred
             
             # Prepare next state
