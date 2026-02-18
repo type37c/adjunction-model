@@ -17,7 +17,8 @@
 
 ## 現在の状況
 
-- **Phase 1 (F/G事前訓練):** 進行中 ([詳細](experiments/phase1_basic_adjunction/))
+- **Phase 1 (F/G事前訓練):** ✅ **完了** ([詳細](experiments/phase1_basic_adjunction/))
+- **Phase 2 (比較ηによる分解的理解):** ✅ **完了** ([詳細](experiments/phase2_intrinsic_reward_baseline/))
 
 ## 貢献
 
