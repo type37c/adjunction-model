@@ -1,0 +1,244 @@
+pybullet build time: Jan 29 2025 23:17:20
+============================================================
+Step 1: Eta Validation Experiment
+============================================================
+Loading F/G model from /home/ubuntu/adjunction-model/experiments/phase2.1_trajectory_prediction/step1_eta_validation/checkpoints/phase1_final.pt...
+Model loaded successfully (trained for 50 epochs)
+
+============================================================
+Running experiment for object: box
+============================================================
+
+Trial 1/5
+  Action: Static observation
+    Frame 0: eta = 0.025196
+    Frame 5: eta = 0.027174
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.025625
+    Yaw 45°: eta = 0.026706
+    Yaw 90°: eta = 0.028476
+    Yaw 135°: eta = 0.030796
+    Yaw 180°: eta = 0.028055
+    Yaw 225°: eta = 0.033831
+    Yaw 270°: eta = 0.031671
+    Yaw 315°: eta = 0.029489
+  Action: Push object
+    Frame 0: eta = 0.025137, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.028419, pos = (0.069, -0.000, 0.050)
+    Frame 20: eta = 0.026152, pos = (0.069, -0.000, 0.050)
+  Action: Topple object
+    Frame 0: eta = 0.025209, pos_z = 0.541
+    Frame 10: eta = 0.026576, pos_z = 0.050
+    Frame 20: eta = 0.026695, pos_z = 0.050
+    Frame 30: eta = 0.027371, pos_z = 0.050
+    Frame 40: eta = 0.027654, pos_z = 0.050
+  Action: Rotate object
+    Frame 0: eta = 0.026080
+    Frame 10: eta = 0.028265
+    Frame 20: eta = 0.027981
+
+Trial 2/5
+  Action: Static observation
+    Frame 0: eta = 0.025024
+    Frame 5: eta = 0.026028
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.025994
+    Yaw 45°: eta = 0.028701
+    Yaw 90°: eta = 0.028849
+    Yaw 135°: eta = 0.030710
+    Yaw 180°: eta = 0.029337
+    Yaw 225°: eta = 0.034180
+    Yaw 270°: eta = 0.031915
+    Yaw 315°: eta = 0.030971
+  Action: Push object
+    Frame 0: eta = 0.026777, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.026662, pos = (0.069, -0.000, 0.050)
+    Frame 20: eta = 0.026255, pos = (0.069, -0.000, 0.050)
+  Action: Topple object
+    Frame 0: eta = 0.026273, pos_z = 0.541
+    Frame 10: eta = 0.027286, pos_z = 0.050
+    Frame 20: eta = 0.026727, pos_z = 0.050
+    Frame 30: eta = 0.026308, pos_z = 0.050
+    Frame 40: eta = 0.028950, pos_z = 0.050
+  Action: Rotate object
+    Frame 0: eta = 0.027901
+    Frame 10: eta = 0.028195
+    Frame 20: eta = 0.027885
+
+Trial 3/5
+  Action: Static observation
+    Frame 0: eta = 0.024891
+    Frame 5: eta = 0.026474
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.027233
+    Yaw 45°: eta = 0.028210
+    Yaw 90°: eta = 0.029523
+    Yaw 135°: eta = 0.032591
+    Yaw 180°: eta = 0.026323
+    Yaw 225°: eta = 0.034588
+    Yaw 270°: eta = 0.032189
+    Yaw 315°: eta = 0.030532
+  Action: Push object
+    Frame 0: eta = 0.025534, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.026835, pos = (0.069, -0.000, 0.050)
+    Frame 20: eta = 0.028473, pos = (0.069, -0.000, 0.050)
+  Action: Topple object
+    Frame 0: eta = 0.024747, pos_z = 0.541
+    Frame 10: eta = 0.026929, pos_z = 0.050
+    Frame 20: eta = 0.026108, pos_z = 0.050
+    Frame 30: eta = 0.027817, pos_z = 0.050
+    Frame 40: eta = 0.026399, pos_z = 0.050
+  Action: Rotate object
+    Frame 0: eta = 0.025275
+    Frame 10: eta = 0.029406
+    Frame 20: eta = 0.029285
+
+Trial 4/5
+  Action: Static observation
+    Frame 0: eta = 0.026819
+    Frame 5: eta = 0.025483
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.026617
+    Yaw 45°: eta = 0.028452
+    Yaw 90°: eta = 0.030483
+    Yaw 135°: eta = 0.030471
+    Yaw 180°: eta = 0.029143
+    Yaw 225°: eta = 0.033323
+    Yaw 270°: eta = 0.032414
+    Yaw 315°: eta = 0.027656
+  Action: Push object
+    Frame 0: eta = 0.025439, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.028391, pos = (0.069, -0.000, 0.050)
+    Frame 20: eta = 0.027461, pos = (0.069, -0.000, 0.050)
+  Action: Topple object
+    Frame 0: eta = 0.026845, pos_z = 0.541
+    Frame 10: eta = 0.027751, pos_z = 0.050
+    Frame 20: eta = 0.027657, pos_z = 0.050
+    Frame 30: eta = 0.026507, pos_z = 0.050
+    Frame 40: eta = 0.025842, pos_z = 0.050
+  Action: Rotate object
+    Frame 0: eta = 0.024674
+    Frame 10: eta = 0.026682
+    Frame 20: eta = 0.026692
+
+Trial 5/5
+  Action: Static observation
+    Frame 0: eta = 0.026684
+    Frame 5: eta = 0.026794
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.025338
+    Yaw 45°: eta = 0.027613
+    Yaw 90°: eta = 0.030221
+    Yaw 135°: eta = 0.031189
+    Yaw 180°: eta = 0.027491
+    Yaw 225°: eta = 0.031342
+    Yaw 270°: eta = 0.032414
+    Yaw 315°: eta = 0.027866
+  Action: Push object
+    Frame 0: eta = 0.025095, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.028114, pos = (0.069, -0.000, 0.050)
+    Frame 20: eta = 0.028459, pos = (0.069, -0.000, 0.050)
+  Action: Topple object
+    Frame 0: eta = 0.026583, pos_z = 0.541
+    Frame 10: eta = 0.026582, pos_z = 0.050
+    Frame 20: eta = 0.027742, pos_z = 0.050
+    Frame 30: eta = 0.027756, pos_z = 0.050
+    Frame 40: eta = 0.027946, pos_z = 0.050
+  Action: Rotate object
+    Frame 0: eta = 0.026586
+    Frame 10: eta = 0.027086
+    Frame 20: eta = 0.026820
+
+Data saved to: /home/ubuntu/adjunction-model/experiments/phase2.1_trajectory_prediction/step1_eta_validation/data/box/eta_observations_20260218_184900.csv
+
+============================================================
+Running experiment for object: cup
+============================================================
+
+Trial 1/5
+  Action: Static observation
+    Frame 0: eta = 0.025228
+    Frame 5: eta = 0.025741
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.026167
+    Yaw 45°: eta = 0.027995
+    Yaw 90°: eta = 0.028567
+    Yaw 135°: eta = 0.034276
+    Yaw 180°: eta = 0.027687
+    Yaw 225°: eta = 0.032206
+    Yaw 270°: eta = 0.032278
+    Yaw 315°: eta = 0.028258
+  Action: Push object
+    Frame 0: eta = 0.027029, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.026878, pos = (0.042, -0.000, 0.062)
+    Frame 20: eta = 0.026974, pos = (0.004, -0.000, 0.040)
+  Action: Topple object
+    Frame 0: eta = 0.025514, pos_z = 0.541
+    Frame 10: eta = 0.028068, pos_z = 0.039
+    Frame 20: eta = 0.028545, pos_z = 0.040
+    Frame 30: eta = 0.027096, pos_z = 0.040
+    Frame 40: eta = 0.027701, pos_z = 0.040
+  Action: Rotate object
+    Frame 0: eta = 0.025720
+    Frame 10: eta = 0.027955
+    Frame 20: eta = 0.028103
+
+Trial 2/5
+  Action: Static observation
+    Frame 0: eta = 0.024978
+    Frame 5: eta = 0.027741
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.023661
+    Yaw 45°: eta = 0.027685
+    Yaw 90°: eta = 0.029893
+    Yaw 135°: eta = 0.030623
+    Yaw 180°: eta = 0.030499
+    Yaw 225°: eta = 0.033011
+    Yaw 270°: eta = 0.033409
+    Yaw 315°: eta = 0.029598
+  Action: Push object
+    Frame 0: eta = 0.024739, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.027831, pos = (0.042, -0.000, 0.062)
+    Frame 20: eta = 0.026401, pos = (0.004, -0.000, 0.040)
+  Action: Topple object
+    Frame 0: eta = 0.025138, pos_z = 0.541
+    Frame 10: eta = 0.027826, pos_z = 0.039
+    Frame 20: eta = 0.027445, pos_z = 0.040
+    Frame 30: eta = 0.027983, pos_z = 0.040
+    Frame 40: eta = 0.027914, pos_z = 0.040
+  Action: Rotate object
+    Frame 0: eta = 0.026092
+    Frame 10: eta = 0.029232
+    Frame 20: eta = 0.027405
+
+Trial 3/5
+  Action: Static observation
+    Frame 0: eta = 0.027427
+    Frame 5: eta = 0.026070
+  Action: Change viewpoint
+    Yaw 0°: eta = 0.023850
+    Yaw 45°: eta = 0.028818
+    Yaw 90°: eta = 0.028954
+    Yaw 135°: eta = 0.031354
+    Yaw 180°: eta = 0.028242
+    Yaw 225°: eta = 0.031975
+    Yaw 270°: eta = 0.033857
+    Yaw 315°: eta = 0.030014
+  Action: Push object
+    Frame 0: eta = 0.025020, pos = (0.009, 0.000, 0.541)
+    Frame 10: eta = 0.028175, pos = (0.042, -0.000, 0.062)
+    Frame 20: eta = 0.026851, pos = (0.004, -0.000, 0.040)
+  Action: Topple object
+    Frame 0: eta = 0.026587, pos_z = 0.541
+    Frame 10: eta = 0.028916, pos_z = 0.039
+    Frame 20: eta = 0.026219, pos_z = 0.040
+    Frame 30: eta = 0.029453, pos_z = 0.040
+    Frame 40: eta = 0.027687, pos_z = 0.040
+  Action: Rotate object
+    Frame 0: eta = 0.025722
+    Frame 10: eta = 0.028502
+    Frame 20: eta = 0.027930
+
+Trial 4/5
+  Action: Static observation
+    Frame 0: eta = 0.025214

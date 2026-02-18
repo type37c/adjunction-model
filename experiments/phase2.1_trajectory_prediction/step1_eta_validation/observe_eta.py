@@ -14,7 +14,7 @@ from datetime import datetime
 
 # Add project root to path
 sys.path.append('/home/ubuntu/adjunction-model')
-sys.path.append('/home/ubuntu/adjunction-model/experiments/step1_eta_validation')
+sys.path.append('/home/ubuntu/adjunction-model/experiments/phase2.1_trajectory_prediction/step1_eta_validation')
 
 from env import SimplePyBulletEnv
 from src.models.adjunction_model import FunctorF, FunctorG
@@ -283,7 +283,7 @@ def run_experiment(object_type, functor_f, functor_g, num_trials=5):
 
 def save_data(data, object_type):
     """Save data to CSV file."""
-    output_dir = f'/home/ubuntu/adjunction-model/experiments/step1_eta_validation/data/{object_type}'
+    output_dir = f'/home/ubuntu/adjunction-model/experiments/phase2.1_trajectory_prediction/step1_eta_validation/data/{object_type}'
     os.makedirs(output_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -307,7 +307,7 @@ def main():
     print("="*60)
     
     # Load F/G model
-    checkpoint_path = '/home/ubuntu/adjunction-model/experiments/step1_eta_validation/checkpoints/phase1_final.pt'
+    checkpoint_path = '/home/ubuntu/adjunction-model/experiments/phase2.1_trajectory_prediction/step1_eta_validation/checkpoints/phase1_final.pt'
     functor_f, functor_g = load_fg_model(checkpoint_path)
     
     # Run experiments for each object type

@@ -11,6 +11,7 @@ from .point_cloud_utils import (
     normalize_point_cloud,
     sample_point_cloud
 )
+from .point_cloud_filler import fill_point_cloud_simple
 
 
 class SimplePyBulletEnv:
@@ -152,12 +153,13 @@ class SimplePyBulletEnv:
         
         return rgb, depth, view_matrix, proj_matrix
     
-    def get_point_cloud(self, num_points=1024):
+    def get_point_cloud(self, num_points=512, fill_interior=True):
         """
         Get point cloud from current camera view.
         
         Args:
             num_points: Number of points to sample
+            fill_interior: Whether to fill the interior (to match Phase 1 training data)
         
         Returns:
             points: num_points x 3 numpy array (normalized)
@@ -170,14 +172,18 @@ class SimplePyBulletEnv:
             self.width, self.height, self.far, self.near
         )
         
-        # Filter outliers
-        points = filter_point_cloud(points, z_min=0.4, z_max=1.0)
+        # Filter outliers (note: Z is negative in camera coordinates)
+        points = filter_point_cloud(points, z_min=-2.0, z_max=0.0)
         
         # Normalize
         points, _, _ = normalize_point_cloud(points)
         
-        # Sample fixed number of points
-        points = sample_point_cloud(points, num_points)
+        # Fill interior if requested (to match Phase 1 training data)
+        if fill_interior:
+            points = fill_point_cloud_simple(points, target_num_points=num_points, fill_ratio=0.7)
+        else:
+            # Sample fixed number of points from surface only
+            points = sample_point_cloud(points, num_points)
         
         return points
     
