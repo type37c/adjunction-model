@@ -121,9 +121,9 @@ class Phase2Experiment:
     def _compute_eta(self, points: torch.Tensor) -> float:
         """Compute reconstruction error η for given points."""
         with torch.no_grad():
-            points = points.unsqueeze(0).to(self.device)  # (1, N, 3)
-            affordance = self.fg_model.F(points)  # (1, affordance_dim)
-            reconstructed = self.fg_model.G(affordance)  # (1, N, 3)
+            points = points.to(self.device)  # (N, 3)
+            affordances = self.fg_model.F(points)  # (N, affordance_dim)
+            reconstructed = self.fg_model.G(affordances)  # (N, 3)
             eta = torch.mean((points - reconstructed) ** 2).item()
         return eta
     
