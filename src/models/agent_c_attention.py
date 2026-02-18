@@ -227,7 +227,7 @@ class DQNTrainer:
         # Compute target Q-value
         with torch.no_grad():
             if done:
-                target_q_value = reward
+                target_q_value = torch.tensor([reward], device=state.device, dtype=torch.float32)
             else:
                 next_q_values = self.target_agent(next_state, next_eta_whole, next_eta_part)
                 max_next_q = next_q_values.max(dim=1)[0]
