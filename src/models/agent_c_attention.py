@@ -222,7 +222,7 @@ class DQNTrainer:
         """
         # Compute Q(s, a)
         q_values = self.agent(state, eta_whole, eta_part)
-        q_value = q_values[0, action]
+        q_value = q_values[0, action].unsqueeze(0)  # Make it (1,) to match target
         
         # Compute target Q-value
         with torch.no_grad():
