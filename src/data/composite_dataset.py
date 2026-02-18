@@ -57,6 +57,19 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         
         return data
     
+    def _ensure_exact_points(self, points: np.ndarray, segments: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Ensure points and segments have exactly num_points elements."""
+        if len(points) > self.num_points:
+            points = points[:self.num_points]
+            segments = segments[:self.num_points]
+        elif len(points) < self.num_points:
+            extra_needed = self.num_points - len(points)
+            extra_points = points[-extra_needed:]
+            extra_segments = segments[-extra_needed:]
+            points = np.vstack([points, extra_points])
+            segments = np.concatenate([segments, extra_segments])
+        return points, segments
+    
     def _sample_cylinder(self, radius: float, height: float, num_points: int, center: np.ndarray = None) -> np.ndarray:
         """Generate points on a cylinder surface."""
         if center is None:
@@ -77,12 +90,15 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         if center is None:
             center = np.zeros(3)
         
-        # Sample points on 6 faces
+        #        # Sample points on 6 faces
         points_per_face = num_points // 6
+        remainder = num_points % 6
         points = []
         
         for i in range(6):
-            face_points = np.random.rand(points_per_face, 3) * size - size / 2
+            # Add extra point to first faces if there's a remainder
+            n_points = points_per_face + (1 if i < remainder else 0)
+            face_points = np.random.rand(n_points, 3) * size - size / 2
             if i == 0:  # +X face
                 face_points[:, 0] = size / 2
             elif i == 1:  # -X face
@@ -95,7 +111,6 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
                 face_points[:, 2] = size / 2
             else:  # -Z face
                 face_points[:, 2] = -size / 2
-            
             points.append(face_points)
         
         points = np.vstack(points) + center
@@ -138,6 +153,7 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             
             points = np.vstack([points_body, points_handle])
             segments = np.concatenate([seg_body, seg_handle])
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["graspable", "stackable", "containable"],
@@ -165,6 +181,7 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             
             points = np.vstack([points_body, points_base])
             segments = np.concatenate([seg_body, seg_base])
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["containable", "stackable"],
@@ -175,7 +192,8 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             # Box: hollow cube
             size = 0.5 + np.random.rand() * 0.3
             points = self._sample_box(size, self.num_points)
-            segments = np.zeros(self.num_points, dtype=np.int64)
+            segments = np.zeros(len(points), dtype=np.int64)
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["graspable", "stackable", "containable"]
@@ -215,6 +233,7 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             
             points = np.vstack([points_handle, points_scoop])
             segments = np.concatenate([seg_handle, seg_scoop])
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["graspable"],
@@ -230,7 +249,8 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             points_horizontal = self._sample_cylinder(radius, 0.3, self.num_points // 2, np.array([0.15, 0, 0.2]))
             
             points = np.vstack([points_vertical, points_horizontal])
-            segments = np.zeros(self.num_points, dtype=np.int64)
+            segments = np.zeros(len(points), dtype=np.int64)
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["graspable", "hookable"]
@@ -262,7 +282,8 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             z = minor_radius * np.sin(phi)
             
             points = np.column_stack([x, y, z])
-            segments = np.zeros(self.num_points, dtype=np.int64)
+            segments = np.zeros(len(points), dtype=np.int64)
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["passable_through"]
@@ -277,7 +298,8 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             points = self._sample_box(width, self.num_points)
             # Flatten in Z direction
             points[:, 2] *= thickness / width
-            segments = np.zeros(self.num_points, dtype=np.int64)
+            segments = np.zeros(len(points), dtype=np.int64)
+            points, segments = self._ensure_exact_points(points, segments)
             
             affordances = {
                 0: ["placeable_on"]
@@ -308,6 +330,7 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         
         points = np.vstack([points_cube, points_handle])
         segments = np.concatenate([seg_cube, seg_handle])
+        points, segments = self._ensure_exact_points(points, segments)
         
         affordances = {
             0: ["stackable"],
