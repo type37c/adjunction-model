@@ -1,81 +1,56 @@
-# Adjunction Model Architecture (v2.1)
+# Adjunction Model Architecture (v3.0)
 
-**Last Updated**: 2026-02-17
+**Last Updated**: 2026-02-18
 
-## 1. Core Philosophy: Intelligence as Slack Management
+## 1. 核心原則：二重学習システム
 
-This model redefines intelligence not as perfect prediction, but as **effective slack management**. The central concept is the **suspension structure**, an always-on process that governs how the agent's understanding of the world (the **adjunction F⊣G**) is formed and maintained.
+本モデルのアーキテクチャは、**「川床（F/G）」**と**「水（Agent C）」**という二重の学習原理に基づいている。これは、エージェントの「自己」と、エージェントが認識する「非自己（環境）」を峻別するための根源的な設計である。
 
-This is achieved through the preservation and utilization of **slack**, a quantifiable measure of the "looseness" in the agent's world model:
+- **随伴層 F/G (川床 / 非自己):** 環境の普遍的で客観的な構造を捉える。損失関数ベースで学習し、その学習はエージェントの意思決定よりもはるかに遅いタイムスケールで行われる。これは、エージェントの行動によって少しずつ侵食され形を変える「川床」に相当する。
 
--   **η (Shape Slack)**: `||Shape - G(F(Shape))||²` — Represents **perceptual uncertainty**.
--   **ε (Affordance Slack)**: `||Affordance - F(G(Affordance))||²` — Represents **semantic ambiguity**.
+- **エージェント層 C (水 / 自己):** 安定した知覚入力（川床）の上で、価値関数に基づき最適な行動を学習する主体。価値関数は、外部から与えられる「正解」ではなく、内発的報酬に基づいて「将来の見通し」を主観的に要約する。これは、川床の地形に沿って流れる「水」に相当する。
 
-Our foundational experiments have shown that **η and ε are strongly coupled** (Spearman correlation 0.92) and that removing reconstruction loss causes **total slack to grow by over 750%**, providing the agent with the flexibility needed for complex, competence-driven behavior.
+この役割分担により、知覚の安定性（不変な世界構造）と行動の柔軟性（文脈に応じた意思決定）が両立される。
 
-## 2. Current Paradigm: Value-Based Intrinsic Reinforcement Learning
+## 2. 知性のエンジン：軌跡としての意味
 
-The current architecture (`v2.1`) focuses on reproducing the seminal 2/13 experiment, where goal-directed behavior emerges from pure intrinsic motivation. This approach abandons supervised learning for Agent C in favor of a **value-based reinforcement learning** framework, which is essential for modeling temporal concepts like **suspension (保留)**.
+本モデルにおいて、意味は静的な状態ではなく、**動的な軌跡**に宿る。特に、再構成誤差 `η = distance(shape, G(F(shape)))` の時間的変化、すなわち**η軌跡**が、知性のあらゆる側面を駆動する単一の原理として機能する。
 
-> **Core Insight**: Suspension is fundamentally about delaying immediate action for future benefit. This requires a future-oriented learning mechanism, which is precisely what value-based RL (specifically TD learning) provides. A simple supervised model that only predicts the *current* state cannot learn to plan for the *future*.
+> 意味は、ηの瞬間値ではなく、ηの軌跡に宿る。価値関数は軌跡の要約であり、TD誤差は予想した軌跡と実際の軌跡のずれである。
 
-### Three-Phase Training Cycle (per Epoch)
+同じηの値でも、それが安定に向かう軌跡の途中にあるのか、崩壊に向かう軌跡の途中にあるのかで全く意味が異なる。エージェントの内発的報酬は、この軌跡の瞬間的な傾き（Δη）を捉え、価値関数はこの状態から始まる未来の軌跡全体を精算・要約する。この単一の原理が、多様で文脈依存的な行動を生み出すのである。
 
-The training process for the `ValueBasedTrainer` is a faithful reproduction of the successful 2/13 experiment. It consists of a three-phase cycle that repeats every epoch:
+## 3. アーキテクチャ詳細
 
-![Value-Based Training Cycle](docs/assets/value_based_training_cycle.png)
-*Figure 1: The three-phase training cycle for the Intrinsic Reward Baseline experiment.*
+### 3.1. フィルター機構による注意選択
 
-**F and G are frozen throughout this entire process.**
+自己と非自己の区別を維持するため、Agent CがF/Gの内部パラメータを直接変更するFiLM変調のような設計は採用しない。代わりに、Agent Cは**フィルター機構**を通じて、**世界への関わり方を変える**。
 
-#### Phase 1: Trajectory Collection (No Gradient)
--   **Goal**: Collect experience by letting the agent interact with the environment.
--   **Process**: The agent, using its current policy, performs actions for a set number of episodes. All states, actions, and resulting intrinsic rewards are stored in a replay buffer.
--   **Components**: `AdjunctionModel` (in `eval` mode), `AgentC` (policy), Environment.
+これは、Agent Cの行動空間に「何を見るか」という認知的な行動（注意選択）を含めることを意味する。Agent Cは、物理的な行動だけでなく、入力情報に対する`attention mask`の生成や座標変換といったフィルター操作を選択する。この「注意をどこに向けるか」という行動もまた、価値関数によって評価され、「どこに注目すれば世界をより良く理解できるか（＝良いη軌跡が生まれるか）」を自ら学習していく。
 
-#### Phase 2: Value Function Update (TD Learning)
--   **Goal**: Teach the `ValueFunction` to predict the expected future sum of rewards.
--   **Process**: The `TDLearner` samples trajectories from the replay buffer and updates the `ValueFunction` using the Bellman equation: `V(s_t) ← R_t + γ * V(s_{t+1})`.
--   **Components**: `ValueFunction`, `TDLearner`.
--   **Loss**: Temporal Difference (TD) Error.
+### 3.2. 二重のタイムスケール
 
-#### Phase 3: Agent C Update (Value Maximization)
--   **Goal**: Improve Agent C's policy to take actions that lead to high-value states.
--   **Process**: Agent C is updated to maximize the value predicted by the now-fixed `ValueFunction`. The agent learns to select actions that it believes will yield the highest long-term intrinsic reward.
--   **Components**: `AgentC`.
--   **Loss**: `-V(s_t)` — The loss is the *negative* of the value, so minimizing the loss maximizes the value.
+モデルの学習は、明確に分離された2つのタイムスケールで進行する。
 
-This cycle allows the agent to learn complex, temporally-extended behaviors by explicitly modeling the future value of its actions.
+1. **速いタイムスケール (Agent C):** フィルターの切り替え、行動選択、価値関数の更新など、エージェントの意思決定と学習が行われる。毎ステップ学習が行われる。
 
-## 3. Component Architecture
+2. **遅いタイムスケール (F/G):** 「川床」そのものの学習。エージェントの長期的な経験に基づき、数百から数千ステップごとに、より普遍的な世界の構造を捉えるようにゆっくりと更新される。
 
-| Component | Model | Input | Output | Key Function |
-| :--- | :--- | :--- | :--- | :--- |
-| **F (Encoder)** | PointNet++ | Point Cloud | Affordance Dist. | Shape → Action Possibilities |
-| **G (Decoder)** | FoldingNet | Affordance Dist. | Point Cloud | Action Possibilities → Shape |
-| **Agent C** | RSSM | Observation | Action | Policy: Selects actions to maximize future value |
-| **Value Func.** | MLP | State | Scalar Value | Value Estimation: Predicts expected future reward |
+### 3.3. 軌跡パターンによる記憶の引き出し
 
-### 3.1. Adjoint Layer (F⊣G)
--   The world model, responsible for interpreting sensory input (point clouds) into a latent space of affordances and vice-versa. In the current experiments, F and G are **pre-trained and frozen**.
+記憶は、**η軌跡パターン**をキーとして連想的に引き出される。新しい状況で観測されたη軌跡と類似した軌跡パターンを持つ過去の経験が、現在の意思決定の参考として活性化される。特に、ηが急激に変動する**Coherence Breakdown**の軌跡は、危機的状況における失敗経験や解決策を即座に引き出すための強力なアンカーとして機能する。
 
-### 3.2. Agent & Value Layer (C, V)
--   **Agent C (RSSM)**: The agent's policy network. It takes the current observation from the environment and decides on an action. Its goal is to steer the environment into states that the `ValueFunction` deems valuable.
--   **ValueFunction (V)**: A simple MLP that learns to map a given state `s_t` to a scalar value representing the expected discounted sum of future intrinsic rewards. It provides the crucial long-term perspective that Agent C uses to make decisions.
+| 引き出しモード | エージェントの状態 | ηの軌跡 | 記憶の性質 | 人間におけるアナロジー |
+|:---|:---|:---|:---|:---|
+| 危機的引き出し | Breakdown時 | 急激な変動軌跡 | 強く関連する記憶（原因、対処法） | 危機的状況での即時判断 |
+| 焦点的引き出し | 活動時 | 安定した改善軌跡 | 現在の軌跡と共鳴する記憶 | 連想、類似 |
+| 拡散的引き出し | 休息時 | 微弱な変動軌跡 | 弱く関連する記憶情報の結合 | 睡眠中の記憶再編成、「ひらめき」 |
 
-## 4. Theoretical Justification: Valence and Temporal Dynamics
+### 3.4. 創発と設計の境界
 
-The move to a value-based architecture is strongly motivated by our latest theoretical insights documented in `docs/theory/priority_and_valence_reconsidered.md`.
+本アーキテクチャでは、何を創発させ、何を設計すべきかの境界を明確に意識する。
 
--   **Priority is an emergent property, not a calculation**: The old model's hardcoded `Priority = Coherence × Uncertainty × Valence` was flawed. The agent must *learn* how to balance these factors.
--   **Valence is Memory**: Coherence and Uncertainty describe the *current* state. Valence, however, is the only axis that spans time. It represents the agent's accumulated confidence and is intrinsically linked to the *expected future outcome* of its actions.
--   **TD Learning as the vehicle for Valence**: The `ValueFunction` is the concrete implementation of this temporal, memory-based aspect. It learns the agent's "optimism" or "pessimism" about future states, which is the essence of valence.
+- **設計するもの:** Agent Cが世界と関わるためのインターフェース（フィルター機構、記憶構造）や、学習のタイムスケールといった、知性が作用するための「器」。
+- **創発するもの:** 「望ましい軌跡のパターン」として内発的に発見される「目的」や「価値」。
 
-This architecture allows us to test the hypothesis that **an agent driven to maximize its future competence (high value) will spontaneously learn to organize its world**, thus reproducing the powerful results of the 2/13 experiment in a more theoretically sound manner.
-
-## 5. Future Experiments (Post-Baseline)
-
-Once the intrinsic reward baseline is firmly established, we will proceed to more complex experiments:
-
--   **Purpose-Emergent Active Assembly**: Investigating if an agent can develop a preference for a specific shape (e.g., a sphere) without being explicitly told to, driven by a `min_shape(ChamferDistance)` loss.
--   **Temporal Suspension**: Designing experiments where the agent must explicitly delay gratification (e.g., ignore a small, immediate reward for a much larger future reward) to test the limits of the value function's temporal planning capabilities.
+我々は知性が情報を整理するための構造（記憶の棚）を設計するが、その棚のどこに何を置き、何を価値あるものと見なすかは、エージェントが「良い軌跡」を求める内発的な力によって決定される。

@@ -8,6 +8,10 @@ Expected outcomes:
 - η (reconstruction error) decreases significantly
 - F/G learn to "see" shapes and affordances
 - Checkpoint saved for Phase 2
+
+RESUME FEATURE:
+- Automatically detects and loads the latest checkpoint
+- Continues training from the saved epoch
 """
 
 import torch
@@ -20,6 +24,29 @@ from src.training.train_phase1_basic import Phase1BasicTrainer
 from torch.utils.data import DataLoader
 import json
 from pathlib import Path
+import glob
+
+
+def find_latest_checkpoint(checkpoint_dir: Path):
+    """Find the latest checkpoint file."""
+    checkpoint_files = glob.glob(str(checkpoint_dir / "phase1_epoch_*.pt"))
+    if not checkpoint_files:
+        return None
+    
+    # Extract epoch numbers and find the latest
+    epoch_nums = []
+    for f in checkpoint_files:
+        try:
+            epoch_num = int(Path(f).stem.split('_')[-1])
+            epoch_nums.append((epoch_num, f))
+        except:
+            continue
+    
+    if not epoch_nums:
+        return None
+    
+    epoch_nums.sort(reverse=True)
+    return epoch_nums[0][1], epoch_nums[0][0]
 
 
 def run_phase1_experiment(
@@ -27,7 +54,8 @@ def run_phase1_experiment(
     batch_size: int = 4,
     num_train_samples: int = 100,
     num_val_samples: int = 20,
-    device: torch.device = torch.device('cpu')
+    device: torch.device = torch.device('cpu'),
+    resume: bool = True
 ):
     """
     Run Phase 1 experiment.
@@ -38,6 +66,7 @@ def run_phase1_experiment(
         num_train_samples: Number of training samples
         num_val_samples: Number of validation samples
         device: Device to run on
+        resume: Whether to resume from checkpoint if available
     """
     
     print("=" * 60)
@@ -48,6 +77,7 @@ def run_phase1_experiment(
     print(f"Train samples: {num_train_samples}")
     print(f"Val samples: {num_val_samples}")
     print(f"Device: {device}")
+    print(f"Resume: {resume}")
     print("=" * 60)
     print()
     
@@ -104,14 +134,44 @@ def run_phase1_experiment(
     )
     print()
     
+    # Check for checkpoint to resume from
+    start_epoch = 1
+    train_history = []
+    val_history = []
+    
+    checkpoint_dir = Path("checkpoints")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    
+    if resume:
+        checkpoint_info = find_latest_checkpoint(checkpoint_dir)
+        if checkpoint_info:
+            checkpoint_path, last_epoch = checkpoint_info
+            print(f"Found checkpoint: {checkpoint_path}")
+            print(f"Resuming from epoch {last_epoch}...")
+            
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = last_epoch + 1
+            
+            # Load history if available
+            if 'train_history' in checkpoint:
+                train_history = checkpoint.get('train_history', [])
+                val_history = checkpoint.get('val_history', [])
+            
+            print(f"  Loaded model state from epoch {last_epoch}")
+            print(f"  Continuing from epoch {start_epoch}")
+            print()
+    
+    if start_epoch > num_epochs:
+        print(f"Training already complete (epoch {start_epoch-1}/{num_epochs})")
+        return
+    
     # Training loop
     print("Starting training...")
     print("-" * 60)
     
-    train_history = []
-    val_history = []
-    
-    for epoch in range(1, num_epochs + 1):
+    for epoch in range(start_epoch, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
         
         # Train
@@ -134,14 +194,15 @@ def run_phase1_experiment(
         
         # Save checkpoint every 10 epochs
         if epoch % 10 == 0:
-            checkpoint_path = Path(f"checkpoints/phase1_epoch_{epoch}.pt")
-            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint_path = checkpoint_dir / f"phase1_epoch_{epoch}.pt"
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': trainer.optimizer.state_dict(),
                 'train_metrics': train_metrics,
-                'val_metrics': val_metrics
+                'val_metrics': val_metrics,
+                'train_history': train_history,
+                'val_history': val_history
             }, checkpoint_path)
             print(f"  Saved checkpoint: {checkpoint_path}")
     
@@ -151,8 +212,7 @@ def run_phase1_experiment(
     
     # Save final checkpoint
     print("Saving final checkpoint...")
-    final_checkpoint_path = Path("checkpoints/phase1_final.pt")
-    final_checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    final_checkpoint_path = checkpoint_dir / "phase1_final.pt"
     torch.save({
         'epoch': num_epochs,
         'model_state_dict': model.state_dict(),
@@ -196,5 +256,6 @@ if __name__ == '__main__':
         batch_size=4,
         num_train_samples=100,
         num_val_samples=20,
-        device=device
+        device=device,
+        resume=True  # Enable automatic resume
     )

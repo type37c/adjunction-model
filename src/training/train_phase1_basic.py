@@ -63,8 +63,8 @@ class Phase1BasicTrainer:
         
         # Only optimize F and G
         fg_params = (
-            list(self.model.functor_f.parameters()) + 
-            list(self.model.functor_g.parameters())
+            list(self.model.F.parameters()) + 
+            list(self.model.G.parameters())
         )
         self.optimizer = optim.Adam(fg_params, lr=lr_fg)
         
@@ -157,8 +157,8 @@ class Phase1BasicTrainer:
             loss.backward()
             
             # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(self.model.functor_f.parameters(), max_norm=1.0)
-            torch.nn.utils.clip_grad_norm_(self.model.functor_g.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.model.F.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.model.G.parameters(), max_norm=1.0)
             
             self.optimizer.step()
             

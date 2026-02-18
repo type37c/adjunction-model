@@ -8,3 +8,6 @@ logs/
 __pycache__/
 *.pyc
 __pycache__/
+
+# Experiment logs
+*.log
