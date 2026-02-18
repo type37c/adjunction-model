@@ -1,46 +1,39 @@
 """
-Composite Shape Dataset for Phase 2
+Simplified Composite Shape Dataset for Phase 2
 
-This dataset generates composite objects (containers, tools, structures, complex objects)
-with semantic segmentation labels for attention selection experiments.
+This dataset generates composite objects using direct point cloud generation
+instead of complex trimesh operations.
 """
 
 import torch
 import numpy as np
 from typing import List, Tuple, Dict
-import trimesh
 
 
 class CompositeShapeDataset(torch.utils.data.Dataset):
     """
     Dataset of composite 3D shapes for testing Agent C's ability to decompose
     unknown objects into known components using attention selection.
+    
+    Uses direct point cloud generation for simplicity and reliability.
     """
     
     def __init__(
         self,
         num_samples: int = 100,
         num_points: int = 1024,
-        category: str = "all",  # "all", "container", "tool", "structure", "composite"
+        category: str = "all",
         seed: int = 42
     ):
-        """
-        Args:
-            num_samples: Number of composite objects to generate
-            num_points: Number of points to sample from each object
-            category: Category of composite objects to generate
-            seed: Random seed for reproducibility
-        """
         self.num_samples = num_samples
         self.num_points = num_points
         self.category = category
         np.random.seed(seed)
         
-        # Generate dataset
         self.data = self._generate_dataset()
     
     def _generate_dataset(self) -> List[Dict]:
-        """Generate composite shape dataset with segmentation labels."""
+        """Generate composite shape dataset."""
         data = []
         
         categories = {
@@ -64,81 +57,125 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         
         return data
     
+    def _sample_cylinder(self, radius: float, height: float, num_points: int, center: np.ndarray = None) -> np.ndarray:
+        """Generate points on a cylinder surface."""
+        if center is None:
+            center = np.zeros(3)
+        
+        # Sample points on cylinder surface
+        theta = np.random.rand(num_points) * 2 * np.pi
+        z = np.random.rand(num_points) * height - height / 2
+        
+        x = radius * np.cos(theta)
+        y = radius * np.sin(theta)
+        
+        points = np.column_stack([x, y, z]) + center
+        return points
+    
+    def _sample_box(self, size: float, num_points: int, center: np.ndarray = None) -> np.ndarray:
+        """Generate points on a box surface."""
+        if center is None:
+            center = np.zeros(3)
+        
+        # Sample points on 6 faces
+        points_per_face = num_points // 6
+        points = []
+        
+        for i in range(6):
+            face_points = np.random.rand(points_per_face, 3) * size - size / 2
+            if i == 0:  # +X face
+                face_points[:, 0] = size / 2
+            elif i == 1:  # -X face
+                face_points[:, 0] = -size / 2
+            elif i == 2:  # +Y face
+                face_points[:, 1] = size / 2
+            elif i == 3:  # -Y face
+                face_points[:, 1] = -size / 2
+            elif i == 4:  # +Z face
+                face_points[:, 2] = size / 2
+            else:  # -Z face
+                face_points[:, 2] = -size / 2
+            
+            points.append(face_points)
+        
+        points = np.vstack(points) + center
+        return points
+    
+    def _sample_sphere(self, radius: float, num_points: int, center: np.ndarray = None) -> np.ndarray:
+        """Generate points on a sphere surface."""
+        if center is None:
+            center = np.zeros(3)
+        
+        # Sample points on sphere using spherical coordinates
+        theta = np.random.rand(num_points) * 2 * np.pi
+        phi = np.arccos(2 * np.random.rand(num_points) - 1)
+        
+        x = radius * np.sin(phi) * np.cos(theta)
+        y = radius * np.sin(phi) * np.sin(theta)
+        z = radius * np.cos(phi)
+        
+        points = np.column_stack([x, y, z]) + center
+        return points
+    
     def _generate_containers(self) -> Dict:
         """Generate container objects (cup, bowl, box)."""
         container_type = np.random.choice(["cup", "bowl", "box"])
         
         if container_type == "cup":
-            # Cup: cylinder (body) + torus (handle)
+            # Cup: cylinder (body) + handle (small cylinder)
             body_radius = 0.3 + np.random.rand() * 0.2
             body_height = 0.5 + np.random.rand() * 0.3
             
-            # Cylinder body
-            cylinder = trimesh.creation.cylinder(
-                radius=body_radius,
-                height=body_height,
-                sections=32
-            )
+            points_body = self._sample_cylinder(body_radius, body_height, self.num_points // 2)
+            seg_body = np.zeros(self.num_points // 2, dtype=np.int64)
             
-            # Torus handle
-            handle = trimesh.creation.annulus(
-                r_min=body_radius * 0.8,
-                r_max=body_radius * 1.0,
-                height=body_height * 0.3,
-                sections=16
-            )
-            handle.apply_translation([body_radius * 1.2, 0, body_height * 0.2])
-            
-            # Combine and sample points
-            points_body, seg_body = self._sample_points_from_mesh(cylinder, self.num_points // 2, segment_id=0)
-            points_handle, seg_handle = self._sample_points_from_mesh(handle, self.num_points // 2, segment_id=1)
+            # Handle (small cylinder on the side)
+            handle_radius = 0.05
+            handle_height = body_height * 0.4
+            handle_center = np.array([body_radius + handle_radius, 0, body_height * 0.1])
+            points_handle = self._sample_cylinder(handle_radius, handle_height, self.num_points // 2, handle_center)
+            seg_handle = np.ones(self.num_points // 2, dtype=np.int64)
             
             points = np.vstack([points_body, points_handle])
             segments = np.concatenate([seg_body, seg_handle])
             
             affordances = {
-                0: ["graspable", "stackable", "containable"],  # body
-                1: ["graspable"]  # handle
+                0: ["graspable", "stackable", "containable"],
+                1: ["graspable"]
             }
             
         elif container_type == "bowl":
             # Bowl: hemisphere (body) + disk (base)
             radius = 0.4 + np.random.rand() * 0.2
             
-            # Hemisphere
-            sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
-            # Keep only upper half - need to rebuild mesh with valid faces
-            mask = sphere.vertices[:, 2] >= 0
-            if mask.sum() > 0:
-                # Create new mesh with only upper vertices
-                upper_vertices = sphere.vertices[mask]
-                # Simple approach: just use the vertices for point sampling
-                sphere = trimesh.Trimesh(vertices=upper_vertices, faces=[])
-            else:
-                # Fallback: use full sphere
-                pass
+            # Hemisphere (upper half of sphere)
+            sphere_points = self._sample_sphere(radius, self.num_points // 2)
+            points_body = sphere_points[sphere_points[:, 2] >= 0]
+            # Pad if needed
+            if len(points_body) < self.num_points // 2:
+                extra = self._sample_sphere(radius, self.num_points // 2 - len(points_body))
+                extra = extra[extra[:, 2] >= 0]
+                points_body = np.vstack([points_body, extra])
+            points_body = points_body[:self.num_points // 2]
+            seg_body = np.zeros(len(points_body), dtype=np.int64)
             
-            # Disk base
-            disk = trimesh.creation.cylinder(radius=radius * 0.8, height=0.05, sections=32)
-            disk.apply_translation([0, 0, -0.025])
-            
-            points_body, seg_body = self._sample_points_from_mesh(sphere, self.num_points // 2, segment_id=0)
-            points_base, seg_base = self._sample_points_from_mesh(disk, self.num_points // 2, segment_id=1)
+            # Disk base (thin cylinder)
+            points_base = self._sample_cylinder(radius * 0.8, 0.05, self.num_points // 2, np.array([0, 0, -0.025]))
+            seg_base = np.ones(self.num_points // 2, dtype=np.int64)
             
             points = np.vstack([points_body, points_base])
             segments = np.concatenate([seg_body, seg_base])
             
             affordances = {
-                0: ["containable", "stackable"],  # body
-                1: ["stackable"]  # base
+                0: ["containable", "stackable"],
+                1: ["stackable"]
             }
             
         else:  # box
             # Box: hollow cube
             size = 0.5 + np.random.rand() * 0.3
-            box = trimesh.creation.box(extents=[size, size, size])
-            
-            points, segments = self._sample_points_from_mesh(box, self.num_points, segment_id=0)
+            points = self._sample_box(size, self.num_points)
+            segments = np.zeros(self.num_points, dtype=np.int64)
             
             affordances = {
                 0: ["graspable", "stackable", "containable"]
@@ -157,52 +194,43 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         tool_type = np.random.choice(["spoon", "hook"])
         
         if tool_type == "spoon":
-            # Spoon: cylinder (handle) + shallow hemisphere (scoop)
+            # Spoon: cylinder (handle) + hemisphere (scoop)
             handle_length = 0.6 + np.random.rand() * 0.2
             handle_radius = 0.05
             
-            # Handle
-            handle = trimesh.creation.cylinder(
-                radius=handle_radius,
-                height=handle_length,
-                sections=16
-            )
-            handle.apply_translation([0, 0, handle_length / 2])
+            points_handle = self._sample_cylinder(handle_radius, handle_length, self.num_points // 2)
+            seg_handle = np.zeros(self.num_points // 2, dtype=np.int64)
             
-            # Scoop (shallow hemisphere)
+            # Scoop (small hemisphere at the end)
             scoop_radius = 0.15
-            scoop = trimesh.creation.icosphere(subdivisions=2, radius=scoop_radius)
-            scoop.vertices = scoop.vertices[scoop.vertices[:, 2] >= -scoop_radius * 0.3]
-            scoop.apply_translation([0, 0, handle_length + scoop_radius * 0.5])
-            
-            points_handle, seg_handle = self._sample_points_from_mesh(handle, self.num_points // 2, segment_id=0)
-            points_scoop, seg_scoop = self._sample_points_from_mesh(scoop, self.num_points // 2, segment_id=1)
+            scoop_center = np.array([0, 0, handle_length / 2 + scoop_radius * 0.5])
+            sphere_points = self._sample_sphere(scoop_radius, self.num_points // 2, scoop_center)
+            points_scoop = sphere_points[sphere_points[:, 2] >= handle_length / 2]
+            # Pad if needed
+            if len(points_scoop) < self.num_points // 2:
+                extra = self._sample_sphere(scoop_radius, self.num_points // 2 - len(points_scoop), scoop_center)
+                points_scoop = np.vstack([points_scoop, extra])
+            points_scoop = points_scoop[:self.num_points // 2]
+            seg_scoop = np.ones(len(points_scoop), dtype=np.int64)
             
             points = np.vstack([points_handle, points_scoop])
             segments = np.concatenate([seg_handle, seg_scoop])
             
             affordances = {
-                0: ["graspable"],  # handle
-                1: ["scoopable"]  # scoop
+                0: ["graspable"],
+                1: ["scoopable"]
             }
             
         else:  # hook
-            # Hook: curved cylinder
+            # Hook: curved cylinder (simplified as bent cylinder)
             radius = 0.05
-            curve_radius = 0.2
             
-            # Create curved path
-            theta = np.linspace(0, np.pi, 20)
-            path = np.column_stack([
-                curve_radius * np.cos(theta),
-                np.zeros_like(theta),
-                curve_radius * np.sin(theta)
-            ])
+            # Create hook as two connected cylinders
+            points_vertical = self._sample_cylinder(radius, 0.4, self.num_points // 2)
+            points_horizontal = self._sample_cylinder(radius, 0.3, self.num_points // 2, np.array([0.15, 0, 0.2]))
             
-            # Create hook mesh along path
-            hook = trimesh.creation.cylinder(radius=radius, height=1.0, sections=16)
-            
-            points, segments = self._sample_points_from_mesh(hook, self.num_points, segment_id=0)
+            points = np.vstack([points_vertical, points_horizontal])
+            segments = np.zeros(self.num_points, dtype=np.int64)
             
             affordances = {
                 0: ["graspable", "hookable"]
@@ -221,32 +249,35 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         structure_type = np.random.choice(["ring", "shelf"])
         
         if structure_type == "ring":
-            # Ring: torus
+            # Ring: torus (simplified as thick cylinder)
             major_radius = 0.4 + np.random.rand() * 0.2
             minor_radius = 0.05 + np.random.rand() * 0.05
             
-            ring = trimesh.creation.annulus(
-                r_min=major_radius - minor_radius,
-                r_max=major_radius + minor_radius,
-                height=minor_radius * 2,
-                sections=32
-            )
+            # Sample points on torus
+            theta = np.random.rand(self.num_points) * 2 * np.pi
+            phi = np.random.rand(self.num_points) * 2 * np.pi
             
-            points, segments = self._sample_points_from_mesh(ring, self.num_points, segment_id=0)
+            x = (major_radius + minor_radius * np.cos(phi)) * np.cos(theta)
+            y = (major_radius + minor_radius * np.cos(phi)) * np.sin(theta)
+            z = minor_radius * np.sin(phi)
+            
+            points = np.column_stack([x, y, z])
+            segments = np.zeros(self.num_points, dtype=np.int64)
             
             affordances = {
                 0: ["passable_through"]
             }
             
         else:  # shelf
-            # Shelf: flat plane
+            # Shelf: flat plane (thin box)
             width = 0.8 + np.random.rand() * 0.4
             depth = 0.4 + np.random.rand() * 0.2
             thickness = 0.05
             
-            shelf = trimesh.creation.box(extents=[width, depth, thickness])
-            
-            points, segments = self._sample_points_from_mesh(shelf, self.num_points, segment_id=0)
+            points = self._sample_box(width, self.num_points)
+            # Flatten in Z direction
+            points[:, 2] *= thickness / width
+            segments = np.zeros(self.num_points, dtype=np.int64)
             
             affordances = {
                 0: ["placeable_on"]
@@ -262,27 +293,25 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
     
     def _generate_composite_objects(self) -> Dict:
         """Generate composite objects (cube with handle)."""
-        # Cube with handle: cube (body) + curved cylinder (handle)
+        # Cube with handle
         cube_size = 0.5 + np.random.rand() * 0.2
         
-        # Cube body
-        cube = trimesh.creation.box(extents=[cube_size, cube_size, cube_size])
+        points_cube = self._sample_box(cube_size, self.num_points // 2)
+        seg_cube = np.zeros(self.num_points // 2, dtype=np.int64)
         
-        # Handle (curved cylinder)
+        # Handle (cylinder on the side)
         handle_radius = 0.05
-        handle = trimesh.creation.cylinder(radius=handle_radius, height=cube_size * 0.6, sections=16)
-        handle.apply_transform(trimesh.transformations.rotation_matrix(np.pi/2, [0, 1, 0]))
-        handle.apply_translation([cube_size * 0.6, 0, cube_size * 0.3])
-        
-        points_cube, seg_cube = self._sample_points_from_mesh(cube, self.num_points // 2, segment_id=0)
-        points_handle, seg_handle = self._sample_points_from_mesh(handle, self.num_points // 2, segment_id=1)
+        handle_length = cube_size * 0.6
+        handle_center = np.array([cube_size / 2 + handle_radius, 0, cube_size * 0.3])
+        points_handle = self._sample_cylinder(handle_radius, handle_length, self.num_points // 2, handle_center)
+        seg_handle = np.ones(self.num_points // 2, dtype=np.int64)
         
         points = np.vstack([points_cube, points_handle])
         segments = np.concatenate([seg_cube, seg_handle])
         
         affordances = {
-            0: ["stackable"],  # cube body
-            1: ["graspable"]  # handle
+            0: ["stackable"],
+            1: ["graspable"]
         }
         
         return {
@@ -292,29 +321,6 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             "category": "composite",
             "type": "cube_with_handle"
         }
-    
-    def _sample_points_from_mesh(
-        self,
-        mesh: trimesh.Trimesh,
-        num_points: int,
-        segment_id: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Sample points from mesh surface."""
-        if len(mesh.faces) > 0:
-            # Sample from mesh surface
-            points, _ = trimesh.sample.sample_surface(mesh, num_points)
-        else:
-            # No faces: sample from vertices with noise
-            if len(mesh.vertices) >= num_points:
-                indices = np.random.choice(len(mesh.vertices), num_points, replace=False)
-                points = mesh.vertices[indices]
-            else:
-                # Duplicate vertices and add noise
-                points = mesh.vertices[np.random.choice(len(mesh.vertices), num_points, replace=True)]
-                points += np.random.randn(*points.shape) * 0.01
-        
-        segments = np.full(num_points, segment_id, dtype=np.int64)
-        return points, segments
     
     def __len__(self) -> int:
         return len(self.data)
