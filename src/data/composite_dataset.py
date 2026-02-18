@@ -107,8 +107,16 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
             
             # Hemisphere
             sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
-            # Keep only upper half
-            sphere.vertices = sphere.vertices[sphere.vertices[:, 2] >= 0]
+            # Keep only upper half - need to rebuild mesh with valid faces
+            mask = sphere.vertices[:, 2] >= 0
+            if mask.sum() > 0:
+                # Create new mesh with only upper vertices
+                upper_vertices = sphere.vertices[mask]
+                # Simple approach: just use the vertices for point sampling
+                sphere = trimesh.Trimesh(vertices=upper_vertices, faces=[])
+            else:
+                # Fallback: use full sphere
+                pass
             
             # Disk base
             disk = trimesh.creation.cylinder(radius=radius * 0.8, height=0.05, sections=32)
@@ -292,7 +300,19 @@ class CompositeShapeDataset(torch.utils.data.Dataset):
         segment_id: int
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Sample points from mesh surface."""
-        points, _ = trimesh.sample.sample_surface(mesh, num_points)
+        if len(mesh.faces) > 0:
+            # Sample from mesh surface
+            points, _ = trimesh.sample.sample_surface(mesh, num_points)
+        else:
+            # No faces: sample from vertices with noise
+            if len(mesh.vertices) >= num_points:
+                indices = np.random.choice(len(mesh.vertices), num_points, replace=False)
+                points = mesh.vertices[indices]
+            else:
+                # Duplicate vertices and add noise
+                points = mesh.vertices[np.random.choice(len(mesh.vertices), num_points, replace=True)]
+                points += np.random.randn(*points.shape) * 0.01
+        
         segments = np.full(num_points, segment_id, dtype=np.int64)
         return points, segments
     

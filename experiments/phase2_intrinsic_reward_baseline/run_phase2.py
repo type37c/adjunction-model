@@ -107,8 +107,7 @@ class Phase2Experiment:
         ).to(self.device)
         
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        model.F.load_state_dict(checkpoint['F_state_dict'])
-        model.G.load_state_dict(checkpoint['G_state_dict'])
+        model.load_state_dict(checkpoint['model_state_dict'])
         
         # Freeze F/G parameters
         for param in model.F.parameters():
