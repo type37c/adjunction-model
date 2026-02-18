@@ -105,18 +105,12 @@ def run_phase1_experiment(
     # Create model
     print("Creating model...")
     model = AdjunctionModel(
-        num_affordances=5,
-        num_points=512,
-        f_hidden_dim=64,
-        g_hidden_dim=128,
-        agent_hidden_dim=256,
-        agent_latent_dim=64,
-        context_dim=128,
-        valence_dim=32,
-        valence_decay=0.1,
-        alpha_curiosity=0.3,
-        beta_competence=0.5,
-        gamma_novelty=0.2
+        input_dim=3,
+        hidden_dim=128,
+        affordance_dim=16,
+        agent_hidden_dim=64,
+        agent_latent_dim=32,
+        agent_action_dim=8
     ).to(device)
     
     print(f"  Model parameters: {sum(p.numel() for p in model.parameters()):,}")
