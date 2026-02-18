@@ -171,7 +171,8 @@ class Phase2Experiment:
         
         # Initialize state (use F to encode whole object)
         with torch.no_grad():
-            state = self.fg_model.F(points.unsqueeze(0).to(self.device))  # (1, affordance_dim)
+            affordances = self.fg_model.F(points.to(self.device))  # (N, affordance_dim)
+            state = affordances.mean(dim=0, keepdim=True)  # (1, affordance_dim) - global pooling
         
         # Episode loop
         episode_reward = 0.0
