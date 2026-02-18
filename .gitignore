@@ -1,8 +1,6 @@
 
 # Training logs and checkpoints
 logs/
-*.pt
-*.pth
 
 # Python cache
 __pycache__/
