@@ -1,6 +1,6 @@
 # 物理的意味的随伴モデル (Physical-Semantic Adjunction Model)
 
-**バージョン:** 4.0  
+**バージョン:** 5.0  
 **最終更新日:** 2026年2月19日
 
 ## プロジェクト概要
@@ -31,28 +31,99 @@
 - **[ロードマップ](./docs/ROADMAP.md)**: プロジェクトのゴール達成に向けた段階的な開発計画
 
 ### 実験・結果
+- **[実験結果総括](./EXPERIMENT_SUMMARY.md)**: 2026年2月19日までの全実験結果のまとめ
+- **[理論的議論](./THEORETICAL_DISCUSSIONS.md)**: 言語層、goal-grounding、命令解釈機構に関する議論
 - **[Phase 1: F/G事前訓練](./experiments/phase1_basic_adjunction/)**: 基本的な随伴の訓練と評価
-- **[Phase 2.1: PyBulletシミュレーション](./experiments/phase2.1_trajectory_prediction/)**: 物理シミュレーション環境でのアフォーダンス学習
-  - **[Step 1: ηの物理的意味の検証](./experiments/phase2.1_trajectory_prediction/step1_eta_validation/)**: F/Gの再構成誤差ηが物理的相互作用に対して意味のある信号を出すかの検証
+- **[Phase 1.5: F/G再訓練](./experiments/phase1.5_fg_retraining/)**: 物理的相互作用を含むデータでF/Gを再訓練
+- **[Step 2 v2: Agent C再設計](./experiments/step2_v2_redesign/)**: 環境とAgent Cの根本的な再設計
+- **[Dynamic F/G実験](./experiments/dynamic_fg/)**: 動的表現の学習と検証
 
 ## 現在の状況
 
 ### 完了したフェーズ
-- **Phase 1 (F/G事前訓練)**: ✅ **完了** ([詳細](experiments/phase1_basic_adjunction/))
-  - 形状の再構成タスクでF/Gを訓練
-  - 問題: ηが主に視点変化に反応し、物理的相互作用への反応が鈍い
 
-### 進行中のフェーズ
-- **Phase 1.5 (F/Gの改修と再訓練)**: 🔄 **進行中**
-  - FunctorF_v2: 近傍構造の導入 + 目的条件付け
-  - PyBulletで「形状 + 行動 → 結果」のデータを収集して再訓練
-  - 目標: ηが物理的相互作用に対して意味のある信号を出すようにする
+#### Phase 1: F/G事前訓練 ✅
+- 形状の再構成タスクでF/Gを訓練
+- **問題**: ηが主に視点変化に反応し、物理的相互作用への反応が鈍い
 
-### 今後のフェーズ
-- **Phase 2.1 (Agent Cとの統合)**: 📋 **計画中**
-  - Module M（目的機構）の実装
-  - Agent CとF/Gのend-to-end訓練
-  - タスク報酬 + 内発的報酬の二重構造
+#### Phase 1.5: F/G再訓練 ✅
+- FunctorF_v2: 近傍構造の導入 + 目的条件付け
+- PyBulletで「形状 + 行動 → 結果」のデータを収集して再訓練
+- **成功**: ηが物理的相互作用に対して意味のある信号を出すようになった
+
+#### Step 2 v2: Agent C再設計 ✅
+- **環境の再設計**: 位置制御、改善された報酬関数、豊かな状態表現
+- **ベースライン成功**: 報酬2.69、成功率3%（Phase 2.1の-84930から大幅改善）
+- **F/G統合失敗**: F/G特徴量が学習を阻害（報酬-6.22、成功率0%）
+- **根本原因**: 表現空間（静的形状）とタスク空間（動的運動）のミスマッチ
+
+#### Dynamic F/G実験 ✅
+- 時系列点群でF/Gを訓練（動的な到達可能性を表現）
+- **F/G訓練成功**: Loss 0.123 → 0.068
+- **Agent C統合失敗**: Dynamic F/Gも学習を改善せず（報酬-4.78、成功率0%）
+- **新たな洞察**: タスクミスマッチ、次元の呪い、ηの発散
+
+### 重要な発見
+
+#### 1. 随伴の成立条件（2026年2月19日）
+
+随伴が成立するには、表現空間の整合性だけでは不十分。以下が必要：
+
+1. **情報の有用性**: Affordanceがタスクに関連する情報を含む
+2. **予測精度**: ηが安定し、発散しない
+3. **分布の一致**: 訓練データとテストデータの分布が整合
+4. **次元の適切性**: 高次元すぎると学習困難
+
+#### 2. 知能 vs 知性（2026年2月19日）
+
+現在のモデルは「知性寄り」：
+- **知能**: 与えられたタスクを効率的に解く
+- **知性**: 何が問題かを自分で見出す
+
+ηの改善を駆動力として、自分で「何を見るか」を選ぶ。しかし、タスクが与えられないと、目的地に着かない。
+
+**解決策**: 命令解釈機構の追加
+- 命令は「何をするか」を与える
+- 「どうやるか」はエージェントが自分で見つける
+
+#### 3. タスクの複雑性（2026年2月19日）
+
+Reachingタスクは単純すぎて、F/Gの能力を検証できない。F/Gは以下のような複雑なタスクで検証すべき：
+- **把持 (Grasping)**: 形状に応じた把持点の推論
+- **組み立て (Assembly)**: 部品間の幾何学的制約
+- **道具使用 (Tool use)**: 道具のaffordanceの理解
+
+### 次のステップ
+
+詳細は [TODO.md](./TODO.md) を参照。
+
+#### 短期（優先度: 高）
+1. **言語層の導入**
+   - CLIP text encoderを使用
+   - 命令 → goal embedding → affordance
+   - Multi-task環境（Reaching, Grasping, Pushing）
+
+2. **Goal-conditioned F/G**
+   - 言語条件付きaffordance
+   - η-grounded goal vectors
+
+#### 中期（優先度: 中）
+1. **複雑なタスクでの検証**
+   - 把持、組み立て、道具使用
+   - F/Gの真の能力を評価
+
+2. **Module Mの実装**
+   - Concern State, Grip Monitor, Salience Modulator
+   - 目的機構の完全な統合
+
+#### 長期（優先度: 低）
+1. **階層的な目的分解**
+   - 抽象的命令 → 具体的なηプロファイル
+   - Goal profileの学習
+
+2. **マルチモーダル基盤モデルの統合**
+   - GPT-4V, Geminiなどの活用
+   - ゼロショット汎化
 
 ## リポジトリ構造
 
@@ -60,6 +131,8 @@
 adjunction-model/
 ├── README.md                          # このファイル
 ├── TODO.md                            # 現在のタスクリスト
+├── EXPERIMENT_SUMMARY.md              # 実験結果総括
+├── THEORETICAL_DISCUSSIONS.md         # 理論的議論
 ├── ARCHITECTURE.md                    # アーキテクチャの詳細
 ├── docs/                              # 理論・設計ドキュメント
 │   ├── THEORY.md                      # 理論的背景
@@ -73,33 +146,11 @@ adjunction-model/
 │   └── training/                      # 訓練ループ・損失関数
 └── experiments/                       # 実験コード・結果
     ├── phase1_basic_adjunction/       # Phase 1の実験
-    ├── phase2.1_trajectory_prediction/ # Phase 2.1の実験
-    │   └── step1_eta_validation/      # Step 1: ηの検証
+    ├── phase1.5_fg_retraining/        # Phase 1.5の実験
+    ├── step2_v2_redesign/             # Step 2 v2の実験
+    ├── dynamic_fg/                    # Dynamic F/Gの実験
     └── archived/                      # アーカイブされた実験
 ```
-
-## 重要な発見
-
-### Step 1: ηの物理的意味の検証（2026年2月18日）
-
-**発見**: Phase 1で訓練されたF/Gの再構成誤差ηは、**視点変化に最も敏感に反応し、物理的相互作用（押す、倒す、回転）への反応は鈍い**。
-
-**原因**: F/Gが学習しているのは「アフォーダンス」ではなく「視点からの形状再構成」という低レベルな特徴。
-
-**対応**: Phase 1.5でF/Gを改修し、物理的相互作用を含むデータで再訓練する。
-
-詳細は [Step 1の結果](./experiments/phase2.1_trajectory_prediction/step1_eta_validation/RESULTS_FIXED.md) を参照してください。
-
-### 目的機構の必要性（2026年2月19日）
-
-**洞察**: アフォーダンスは「オブジェクトの性質」ではなく「オブジェクトとエージェントの関係」である。エージェントの**目的**なしにアフォーダンスは成立しない。
-
-**設計**: Module M（目的機構）を導入し、以下の3つのサブコンポーネントで構成：
-1. **Concern State**: エージェントの関心事を表現（ハイデガーの「〜のために存在する」に対応）
-2. **Grip Monitor**: 最適からの逸脱を検出（メルロ＝ポンティの「最大把握」に対応）
-3. **Salience Modulator**: アフォーダンスのランドスケープをフィールドに変換（SIFの「選択的開放性」に対応）
-
-詳細は [目的機構の設計](./research/PURPOSE_MECHANISM_DESIGN.md) を参照してください。
 
 ## クイックスタート
 
@@ -112,23 +163,49 @@ cd adjunction-model
 
 # 依存パッケージのインストール
 pip install torch torchvision numpy matplotlib
-pip install pybullet scipy  # Phase 2.1用
+pip install pybullet scipy  # PyBullet実験用
 ```
 
-### Phase 1の実験を再現
+### 最新の実験を再現
+
+#### Step 2 v2（Agent C再設計）
 
 ```bash
-cd experiments/phase1_basic_adjunction
-python run.py
+cd experiments/step2_v2_redesign
+
+# ベースライン訓練
+python train.py --mode baseline --episodes 1500
+
+# F/G-enhanced訓練
+python train.py --mode with_fg --episodes 1500
+
+# 結果の比較
+python run_experiment.py
 ```
 
-### Step 1の実験を再現
+#### Dynamic F/G実験
 
 ```bash
-cd experiments/phase2.1_trajectory_prediction/step1_eta_validation
-python observe_eta.py
-python analyze_results.py
+cd experiments/dynamic_fg
+
+# Dynamic F/Gの訓練
+python scripts/train_agent_c_with_online_fg.py --episodes 1000
+
+# Agent C v3の訓練
+python scripts/train_agent_c_v3.py --mode baseline --episodes 1500
+python scripts/train_agent_c_v3.py --mode with_fg --episodes 1500
 ```
+
+## エージェントへの引き継ぎガイド
+
+将来のエージェントがこのプロジェクトを引き継ぐ際は、以下の順序でドキュメントを読むことを推奨します：
+
+1. **[EXPERIMENT_SUMMARY.md](./EXPERIMENT_SUMMARY.md)**: 全実験の結果と主要な発見
+2. **[THEORETICAL_DISCUSSIONS.md](./THEORETICAL_DISCUSSIONS.md)**: 理論的課題と解決策
+3. **[TODO.md](./TODO.md)**: 次のステップと優先順位
+4. **各実験のREADME**: 実験の詳細な設計と結果
+   - [Step 2 v2](./experiments/step2_v2_redesign/README.md)
+   - [Dynamic F/G](./experiments/dynamic_fg/README.md)
 
 ## 貢献
 
