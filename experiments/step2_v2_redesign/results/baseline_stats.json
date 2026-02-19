@@ -1,0 +1,10 @@
+{
+  "mode": "baseline",
+  "num_episodes": 1500,
+  "elapsed_seconds": 305.52718448638916,
+  "final_avg_reward": 2.6939061771051613,
+  "final_success_rate": 0.03,
+  "final_avg_distance": 0.45337979094031455,
+  "best_avg_reward": 18.869421227891664,
+  "total_successes": 61
+}

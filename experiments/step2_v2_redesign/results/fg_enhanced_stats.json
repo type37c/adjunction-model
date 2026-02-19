@@ -1,0 +1,11 @@
+{
+  "mode": "fg_enhanced",
+  "num_episodes": 1500,
+  "elapsed_seconds": 4017.4841866493225,
+  "final_avg_reward": -6.223197787913202,
+  "final_success_rate": 0.0,
+  "final_avg_distance": 1.2704588153686656,
+  "best_avg_reward": 18.825850778730455,
+  "total_successes": 21,
+  "final_avg_eta": 3.3982567321538926
+}
