@@ -1,0 +1,8 @@
+{
+  "num_episodes": 1500,
+  "use_fg": true,
+  "final_avg_reward": -4.775980006806076,
+  "final_success_rate": 0.0,
+  "final_avg_distance": 2.0463902603748063,
+  "final_avg_eta": 14.65282712135315
+}
